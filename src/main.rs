@@ -4,13 +4,15 @@ use clap::Parser;
 use video_cue_engine::{RunOptions, run};
 
 #[derive(Parser)]
-#[command(about = "Detect motion in a fixed-camera MP4 and write event clips")]
+#[command(
+    about = "Detect motion in a fixed-camera MP4 and write a highlight video and event clips"
+)]
 struct Cli {
     /// Input MP4 file
     #[arg(long)]
     input: PathBuf,
 
-    /// Directory for analysis.json and event clips (must be absent or empty)
+    /// Parent directory; video-cue-engine-output is created inside it
     #[arg(long)]
     output: PathBuf,
 

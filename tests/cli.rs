@@ -20,26 +20,71 @@ fn run_cli(input: &Path, output: &Path) -> std::process::Output {
 }
 
 #[test]
-fn cli_detects_known_motion_and_creates_playable_clips() {
+fn cli_places_results_in_video_cue_engine_output_under_requested_parent() {
     let temp = tempdir().unwrap();
-    let output_dir = temp.path().join("result");
-    let result = run_cli(&fixture("scene-motion.mp4"), &output_dir);
+    let output_parent = temp.path().join("downloads");
+    fs::create_dir_all(&output_parent).unwrap();
+    fs::write(output_parent.join("existing-download.txt"), b"keep me").unwrap();
+    let result = run_cli(&fixture("scene-motion.mp4"), &output_parent);
     assert!(
         result.status.success(),
         "{}",
         String::from_utf8_lossy(&result.stderr)
     );
 
+    let output_dir = output_parent.join("video-cue-engine-output");
+    assert_eq!(
+        fs::read(output_parent.join("existing-download.txt")).unwrap(),
+        b"keep me"
+    );
     let analysis: Value =
         serde_json::from_slice(&fs::read(output_dir.join("analysis.json")).unwrap()).unwrap();
     let truth: Value =
         serde_json::from_slice(&fs::read(fixture("ground-truth.json")).unwrap()).unwrap();
-    assert_eq!(analysis["schema_version"], 1);
+    assert_eq!(analysis["schema_version"], 2);
     assert_eq!(analysis["input"]["duration_seconds"], 14.0);
     assert!(Path::new(analysis["input"]["path"].as_str().unwrap()).is_file());
+    assert_eq!(analysis["highlight_path"], "highlights.mp4");
+    let highlight = output_dir.join(analysis["highlight_path"].as_str().unwrap());
+    assert!(highlight.is_file());
+    let highlight_probe = Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration:stream=nb_frames,width,height",
+            "-of",
+            "json",
+        ])
+        .arg(&highlight)
+        .output()
+        .unwrap();
+    assert!(highlight_probe.status.success(), "invalid highlight");
+    let highlight_info: Value = serde_json::from_slice(&highlight_probe.stdout).unwrap();
+    let highlight_duration: f64 = highlight_info["format"]["duration"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert!((10.8..11.6).contains(&highlight_duration));
+    assert!(
+        highlight_info["streams"][0]["nb_frames"]
+            .as_str()
+            .unwrap()
+            .parse::<u64>()
+            .unwrap()
+            > 150
+    );
     let events = analysis["events"].as_array().unwrap();
     let expected = truth["events"].as_array().unwrap();
     assert_eq!(events.len(), expected.len());
+    for (event, target_position) in events.iter().zip([1.0, 5.0, 8.6]) {
+        let position = event["highlight_start_seconds"].as_f64().unwrap();
+        assert!(
+            (position - target_position).abs() < 0.3,
+            "unexpected highlight position: {position}"
+        );
+    }
 
     for (event, expected) in events.iter().zip(expected) {
         for field in ["start_seconds", "end_seconds"] {
@@ -86,16 +131,19 @@ fn cli_detects_known_motion_and_creates_playable_clips() {
 #[test]
 fn cli_writes_no_events_for_a_still_video() {
     let temp = tempdir().unwrap();
-    let output_dir = temp.path().join("result");
-    let result = run_cli(&fixture("scene-still.mp4"), &output_dir);
+    let output_parent = temp.path().join("downloads");
+    let result = run_cli(&fixture("scene-still.mp4"), &output_parent);
     assert!(
         result.status.success(),
         "{}",
         String::from_utf8_lossy(&result.stderr)
     );
+    let output_dir = output_parent.join("video-cue-engine-output");
     let analysis: Value =
         serde_json::from_slice(&fs::read(output_dir.join("analysis.json")).unwrap()).unwrap();
     assert!(analysis["events"].as_array().unwrap().is_empty());
+    assert!(analysis["highlight_path"].is_null());
+    assert!(!output_dir.join("highlights.mp4").exists());
 }
 
 #[test]
@@ -103,13 +151,18 @@ fn cli_explains_a_broken_mp4_and_does_not_create_an_analysis() {
     let temp = tempdir().unwrap();
     let input = temp.path().join("broken.mp4");
     fs::write(&input, b"not a valid MP4").unwrap();
-    let output_dir = temp.path().join("result");
+    let output_parent = temp.path().join("downloads");
 
-    let result = run_cli(&input, &output_dir);
+    let result = run_cli(&input, &output_parent);
 
     assert!(!result.status.success());
     assert!(String::from_utf8_lossy(&result.stderr).contains("cannot inspect input"));
-    assert!(!output_dir.join("analysis.json").exists());
+    assert!(
+        !output_parent
+            .join("video-cue-engine-output")
+            .join("analysis.json")
+            .exists()
+    );
 }
 
 #[test]
@@ -118,23 +171,45 @@ fn cli_rejects_an_mp4_truncated_after_its_header() {
     let input = temp.path().join("truncated.mp4");
     let fixture_bytes = fs::read(fixture("scene-motion.mp4")).unwrap();
     fs::write(&input, &fixture_bytes[..fixture_bytes.len() / 2]).unwrap();
-    let output_dir = temp.path().join("result");
+    let output_parent = temp.path().join("downloads");
 
-    let result = run_cli(&input, &output_dir);
+    let result = run_cli(&input, &output_parent);
 
     assert!(!result.status.success());
     assert!(String::from_utf8_lossy(&result.stderr).contains("cannot decode input"));
-    assert!(!output_dir.join("analysis.json").exists());
+    assert!(
+        !output_parent
+            .join("video-cue-engine-output")
+            .join("analysis.json")
+            .exists()
+    );
 }
 
 #[test]
 fn cli_reports_a_missing_input_file() {
     let temp = tempdir().unwrap();
-    let output_dir = temp.path().join("result");
+    let output_parent = temp.path().join("downloads");
 
-    let result = run_cli(&temp.path().join("missing.mp4"), &output_dir);
+    let result = run_cli(&temp.path().join("missing.mp4"), &output_parent);
 
     assert!(!result.status.success());
     assert!(String::from_utf8_lossy(&result.stderr).contains("input is not a readable file"));
-    assert!(!output_dir.exists());
+    assert!(!output_parent.exists());
+}
+
+#[test]
+fn cli_rejects_a_nonempty_video_cue_engine_output_without_overwriting_it() {
+    let temp = tempdir().unwrap();
+    let output_parent = temp.path().join("downloads");
+    let output_dir = output_parent.join("video-cue-engine-output");
+    fs::create_dir_all(&output_dir).unwrap();
+    let marker = output_dir.join("existing.txt");
+    fs::write(&marker, b"keep me").unwrap();
+
+    let result = run_cli(&fixture("scene-still.mp4"), &output_parent);
+
+    assert!(!result.status.success());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("video-cue-engine-output"));
+    assert_eq!(fs::read(marker).unwrap(), b"keep me");
+    assert!(!output_dir.join("analysis.json").exists());
 }
