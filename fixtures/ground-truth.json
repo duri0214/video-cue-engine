@@ -1,0 +1,19 @@
+{
+  "events": [
+    {
+      "name": "person crossing",
+      "start_seconds": 2.0,
+      "end_seconds": 4.0
+    },
+    {
+      "name": "door opening",
+      "start_seconds": 6.0,
+      "end_seconds": 7.6
+    },
+    {
+      "name": "box moving",
+      "start_seconds": 10.0,
+      "end_seconds": 11.6
+    }
+  ]
+}
