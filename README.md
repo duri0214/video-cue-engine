@@ -1,13 +1,48 @@
 # video-cue-engine
 
-固定視点の録画済み MP4 を解析し、動きのあった区間を `analysis.json`、1本のハイライト動画、確認用の短い MP4 クリップに出力する Rust CLI です。人物や物体の種類は識別しません。
+固定視点の録画済み MP4 を解析し、動きのあった区間を `analysis.json`、1本のハイライト動画、確認用の短い MP4 クリップに出力する Rust アプリです。フォルダ単位のローカル GUI と、単一 MP4 用の CLI を利用できます。人物や物体の種類は識別しません。
 
 ## 必要なもの
 
 - Rust / Cargo
 - `ffmpeg` と `ffprobe` が `PATH` 上にあること。動画作成には `libx264` と `drawtext` 対応の FFmpeg が必要です。タイムコードの描画には、Windows では Consolas または Arial、Linux では DejaVu Sans Mono または Liberation Mono、macOS では Menlo のシステムフォントを使用します。
 
-## 実行
+## ローカル画面から一括解析（Windows）
+
+開発者は次のコマンドで GUI の実行ファイルをビルドします。
+
+```powershell
+cargo build --release --features gui --bin video-cue-engine-gui
+```
+
+`target\release\video-cue-engine-gui.exe` をダブルクリックすると起動します。ビルド済みの実行ファイルを利用する人には Rust、Django、ブラウザは不要です。FFmpeg / ffprobe は利用者の PC にインストールし、`PATH` に追加してください。現段階ではインストーラーや FFmpeg の同梱は行いません。
+
+1. 「入力フォルダを選ぶ」で録画フォルダを選びます。直下にある `.mp4` / `.MP4` の通常ファイルだけを、ファイル名順に一覧表示します。サブフォルダとシンボリックリンクは対象外です。
+2. 対象件数と一覧を確認します。ファイルを追加・削除した場合は「再読み込み」で一覧を更新します。
+3. 出力先を確認します。Windows の初期値は Known Folder API が示す現在の「ダウンロード」です。移動済みの場所にも対応します。「出力フォルダを変更」で別の既存フォルダを選べます。
+4. 「一括解析を開始」を押します。出力先の存在、読み取り、子フォルダ作成・書き込み、FFmpeg / ffprobe の起動を確認してから、表示した動画を順番に解析します。存在しない出力先は作成せず、理由を画面に表示します。
+5. 動画ごとの状態、完了・失敗件数を確認します。失敗した動画の理由を表示し、次の動画へ進みます。終了後は「今回の出力フォルダを開く」で結果を確認できます。
+
+配色は `vj-copilot` と同じ暗い背景・ミント色です。日本語表示には Windows のメイリオを使用します。解析中もスクロールと画面更新は継続します。処理の途中終了には対応していないため、実行中のフォルダ変更・再実行・ウィンドウ終了は抑止します。
+
+実行ごとに `video-cue-engine-batch-` で始まる一意のフォルダを作り、その下の `0001`、`0002` … に一覧と同じ順番で保存します。長いファイル名や大文字・小文字の違いによる出力先の衝突を避けるため、動画の保存先は番号にしています。元動画は画面の一覧と各 `analysis.json` の `input.path` で確認できます。再実行時は別のフォルダになり、以前の結果を上書きしません。
+
+```text
+選択した出力フォルダ/
+└── video-cue-engine-batch-ランダムな識別子/
+    ├── 0001/
+    │   ├── analysis.json
+    │   ├── highlights.mp4
+    │   └── events/event-001.mp4
+    └── 0002/
+        └── analysis.json
+```
+
+動きのない動画は `analysis.json` だけを作成します。失敗時は途中の出力を残す場合があるため、画面の成功・失敗を確認してください。解析設定は CLI の初期値と同じです。
+
+GUI は `gui` feature と専用バイナリに分離しています。検出・出力規則と順次処理はライブラリの `BatchPlan::scan` / `run_batch` に置き、GUI は別スレッドからの通知を表示します。CLI のみなら GUI 依存のビルドは不要です。GUI の動作確認対象は Windows です。
+
+## CLI から単一 MP4 を解析
 
 ```sh
 cargo run --release -- --input /path/to/recording.mp4 --output /path/to/result-folder
@@ -73,6 +108,21 @@ cargo fmt --all -- --check
 cargo test --all-targets
 cargo clippy --all-targets --all-features -- -D warnings
 ```
+
+GUI を含むビルド・テストは `cargo test --all-targets --all-features` で確認できます。一括処理の統合テストでは、直下の MP4 検出、出力先エラー、FFmpeg 不在、壊れた動画の後の継続、プレビュー後のファイル削除、再実行時の既存結果保護を確認します。Windows では一時フォルダに読み取り・書き込み拒否の ACL を設定するテストも実行し、終了時に解除します（Windows PowerShell を使用）。GUI のテストはネイティブのフォルダ選択結果を差し替え、実際に描画した開始ボタンへのクリック、出力先エラー後の再実行、ワーカーからの完了表示までを画面なしで検証します。
+
+Windows で画面を確認する場合は、リポジトリ直下の PowerShell で次を実行します。
+
+```powershell
+cargo build --features gui --bin video-cue-engine-gui
+$batchCheckOutput = Join-Path $env:TEMP ('video-cue-ui-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $batchCheckOutput
+(Resolve-Path .\fixtures).Path
+$batchCheckOutput
+.\target\debug\video-cue-engine-gui.exe
+```
+
+表示した `fixtures` の絶対パスを入力フォルダに、新規作成した一時フォルダを出力先に選びます。対象 2 件、完了 2 件・失敗 0 件となり、`scene-motion.mp4` の結果にはハイライトとイベント動画、`scene-still.mp4` の結果には空イベントの JSON があることを確認してください。
 
 ## 開発ルールとスキル
 

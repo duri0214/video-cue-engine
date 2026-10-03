@@ -2,12 +2,13 @@ use std::{
     fs,
     io::Read,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::Stdio,
 };
 
 use serde::Deserialize;
 use thiserror::Error;
 
+use super::process::command;
 use crate::domain::{detection::MotionSample, highlight::HighlightSegment};
 
 pub const SAMPLE_RATE: usize = 5;
@@ -19,6 +20,10 @@ const PIXEL_DELTA: u8 = 20;
 
 #[derive(Debug, Error)]
 pub enum MediaError {
+    #[error(
+        "{tool} を実行できません。FFmpeg をインストールし、ffmpeg と ffprobe を PATH に追加してアプリを再起動してください。({reason})"
+    )]
+    Unavailable { tool: String, reason: String },
     #[error("cannot inspect input {path}: {reason}")]
     Probe { path: PathBuf, reason: String },
     #[error("invalid MP4 {path}: {reason}")]
@@ -54,8 +59,31 @@ struct ProbeFormat {
     format_name: String,
 }
 
+pub fn check_available() -> Result<(), MediaError> {
+    check_tool("ffmpeg")?;
+    check_tool("ffprobe")
+}
+
+fn check_tool(tool: &str) -> Result<(), MediaError> {
+    let output =
+        command(tool)
+            .arg("-version")
+            .output()
+            .map_err(|error| MediaError::Unavailable {
+                tool: tool.to_owned(),
+                reason: error.to_string(),
+            })?;
+    if !output.status.success() {
+        return Err(MediaError::Unavailable {
+            tool: tool.to_owned(),
+            reason: format!("exit status: {}", output.status),
+        });
+    }
+    Ok(())
+}
+
 pub fn probe(path: &Path) -> Result<VideoInfo, MediaError> {
-    let output = Command::new("ffprobe")
+    let output = command("ffprobe")
         .args([
             "-v",
             "error",
@@ -115,7 +143,7 @@ pub fn probe(path: &Path) -> Result<VideoInfo, MediaError> {
 }
 
 pub fn motion_samples(path: &Path) -> Result<Vec<MotionSample>, MediaError> {
-    let mut child = Command::new("ffmpeg")
+    let mut child = command("ffmpeg")
         .args([
             "-hide_banner",
             "-loglevel",
@@ -238,7 +266,7 @@ pub fn motion_samples(path: &Path) -> Result<Vec<MotionSample>, MediaError> {
 }
 
 pub fn create_clip(input: &Path, output: &Path, start: f64, end: f64) -> Result<(), MediaError> {
-    let result = Command::new("ffmpeg")
+    let result = command("ffmpeg")
         .args([
             "-hide_banner",
             "-loglevel",
@@ -317,7 +345,7 @@ pub fn create_highlight(
          box=1:boxcolor=black@0.7:boxborderw=5:x=8:y=h-th-8,\
          setpts=N/({HIGHLIGHT_FRAME_RATE}*TB)"
     );
-    let result = Command::new("ffmpeg")
+    let result = command("ffmpeg")
         .args([
             "-hide_banner",
             "-loglevel",

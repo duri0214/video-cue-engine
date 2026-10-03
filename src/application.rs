@@ -3,6 +3,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+pub mod batch;
+
 use serde::Serialize;
 use thiserror::Error;
 
@@ -66,6 +68,11 @@ struct AnalysisEvent {
 }
 
 pub fn run(options: RunOptions) -> Result<(), RunError> {
+    let output = options.output.join(RESULT_DIRECTORY_NAME);
+    run_to_output(options, &output)
+}
+
+fn run_to_output(options: RunOptions, output: &Path) -> Result<(), RunError> {
     let config = DetectionConfig::new(options.threshold, options.min_duration, options.merge_gap)?;
     if !options.input.is_file() {
         return Err(RunError::MissingInput(options.input));
@@ -92,8 +99,7 @@ pub fn run(options: RunOptions) -> Result<(), RunError> {
         HIGHLIGHT_FRAME_RATE,
     );
 
-    let output = options.output.join(RESULT_DIRECTORY_NAME);
-    prepare_output(&output)?;
+    prepare_output(output)?;
     let mut analysis_events = Vec::with_capacity(events.len());
     if !events.is_empty() {
         ffmpeg::create_highlight(&input, &output.join("highlights.mp4"), &highlight.segments)?;
