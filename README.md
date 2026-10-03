@@ -13,7 +13,7 @@
 cargo run --release -- --input recording.mp4 --output result
 ```
 
-`--output` には、存在しないディレクトリか空のディレクトリを指定します。既存の解析結果を誤って上書きしないため、中身のあるディレクトリは拒否します。
+`--output` には、解析結果を置く親ディレクトリを指定します。指定先の下に `video-cue-engine-output` を自動作成し、その中へ解析結果を保存します。`video-cue-engine-output` がすでに存在して中身がある場合は、既存の解析結果を誤って上書きしないため拒否します。指定した親ディレクトリには、他のファイルやフォルダがあっても構いません。
 
 | オプション | 初期値 | 意味 |
 | --- | ---: | --- |
@@ -27,11 +27,12 @@ cargo run --release -- --input recording.mp4 --output result
 
 ```text
 result/
-├── analysis.json
-├── highlights.mp4
-└── events/
-    ├── event-001.mp4
-    └── event-002.mp4
+└── video-cue-engine-output/
+    ├── analysis.json
+    ├── highlights.mp4
+    └── events/
+        ├── event-001.mp4
+        └── event-002.mp4
 ```
 
 ```json

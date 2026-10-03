@@ -15,6 +15,7 @@ use crate::{
 };
 
 const CLIP_PADDING_SECONDS: f64 = 1.0;
+const RESULT_DIRECTORY_NAME: &str = "video-cue-engine-output";
 
 #[derive(Debug)]
 pub struct RunOptions {
@@ -91,15 +92,12 @@ pub fn run(options: RunOptions) -> Result<(), RunError> {
         HIGHLIGHT_FRAME_RATE,
     );
 
-    prepare_output(&options.output)?;
+    let output = options.output.join(RESULT_DIRECTORY_NAME);
+    prepare_output(&output)?;
     let mut analysis_events = Vec::with_capacity(events.len());
     if !events.is_empty() {
-        ffmpeg::create_highlight(
-            &input,
-            &options.output.join("highlights.mp4"),
-            &highlight.segments,
-        )?;
-        create_directory(&options.output.join("events"))?;
+        ffmpeg::create_highlight(&input, &output.join("highlights.mp4"), &highlight.segments)?;
+        create_directory(&output.join("events"))?;
     }
     for (index, (event, highlight_start_seconds)) in events
         .iter()
@@ -109,12 +107,7 @@ pub fn run(options: RunOptions) -> Result<(), RunError> {
         let clip_path = format!("events/event-{:03}.mp4", index + 1);
         let clip_start = (event.start_seconds - CLIP_PADDING_SECONDS).max(0.0);
         let clip_end = (event.end_seconds + CLIP_PADDING_SECONDS).min(video.duration_seconds);
-        ffmpeg::create_clip(
-            &input,
-            &options.output.join(&clip_path),
-            clip_start,
-            clip_end,
-        )?;
+        ffmpeg::create_clip(&input, &output.join(&clip_path), clip_start, clip_end)?;
         analysis_events.push(AnalysisEvent {
             start_seconds: event.start_seconds,
             end_seconds: event.end_seconds,
@@ -135,7 +128,7 @@ pub fn run(options: RunOptions) -> Result<(), RunError> {
     };
     let mut json = serde_json::to_vec_pretty(&analysis)?;
     json.push(b'\n');
-    let analysis_path = options.output.join("analysis.json");
+    let analysis_path = output.join("analysis.json");
     fs::write(&analysis_path, json).map_err(|source| RunError::Io {
         path: analysis_path,
         source,

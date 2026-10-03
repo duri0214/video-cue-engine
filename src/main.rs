@@ -12,7 +12,7 @@ struct Cli {
     #[arg(long)]
     input: PathBuf,
 
-    /// Directory for analysis.json and videos (must be absent or empty)
+    /// Parent directory; video-cue-engine-output is created inside it
     #[arg(long)]
     output: PathBuf,
 
