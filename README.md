@@ -15,7 +15,7 @@ cargo run --release -- --input /path/to/recording.mp4 --output /path/to/result-f
 
 `--output` には、解析結果を置く親ディレクトリを指定します。指定先の下に `video-cue-engine-output` を自動作成し、その中へ解析結果を保存します。`video-cue-engine-output` がすでに存在して中身がある場合は、既存の解析結果を誤って上書きしないため拒否します。指定した親ディレクトリには、他のファイルやフォルダがあっても構いません。
 
-上の例では、解析結果は `/path/to/result-folder/video-cue-engine-output` に保存されます。Windows では、たとえば `--output "C:\Users\yoshi\Downloads"` と指定すると `C:\Users\yoshi\Downloads\video-cue-engine-output` に保存されます。
+上の例では、解析結果は `/path/to/result-folder/video-cue-engine-output` に保存されます。Windows PowerShell では、たとえば `--output "$env:USERPROFILE\Downloads"` と指定すると `$env:USERPROFILE\Downloads\video-cue-engine-output` に保存されます。
 
 | オプション | 初期値 | 意味 |
 | --- | ---: | --- |
