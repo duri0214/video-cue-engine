@@ -6,7 +6,10 @@ use std::{
 use thiserror::Error;
 
 use super::{RunError, RunOptions, run_to_output};
-use crate::infra::{ffmpeg, folders};
+use crate::infra::{
+    ffmpeg, folders,
+    upload::{UploadConfig, UploadError, UploadReceipt, upload_result},
+};
 
 #[derive(Debug, Error)]
 pub enum BatchError {
@@ -63,6 +66,13 @@ pub enum BatchEvent {
         index: usize,
         result: Result<(), RunError>,
     },
+    UploadStarted {
+        index: usize,
+    },
+    UploadFinished {
+        index: usize,
+        result: Result<UploadReceipt, UploadError>,
+    },
 }
 
 #[derive(Debug)]
@@ -70,12 +80,23 @@ pub struct BatchSummary {
     pub output: PathBuf,
     pub succeeded: usize,
     pub failed: usize,
+    pub uploaded: usize,
+    pub upload_failed: usize,
 }
 
 /// Synchronous, UI-independent batch use case. Call on a worker thread for interactive use.
 pub fn run_batch(
     plan: &BatchPlan,
     output: &Path,
+    notify: impl FnMut(BatchEvent),
+) -> Result<BatchSummary, BatchError> {
+    run_batch_with_upload(plan, output, None, notify)
+}
+
+pub fn run_batch_with_upload(
+    plan: &BatchPlan,
+    output: &Path,
+    upload: Option<&UploadConfig>,
     mut notify: impl FnMut(BatchEvent),
 ) -> Result<BatchSummary, BatchError> {
     folders::check_output(output).map_err(|source| BatchError::Output {
@@ -95,6 +116,8 @@ pub fn run_batch(
         output: directory,
         succeeded: 0,
         failed: 0,
+        uploaded: 0,
+        upload_failed: 0,
     };
     for (index, input) in plan.files.iter().enumerate() {
         // Numeric names are bounded and cannot collide on case-insensitive output filesystems.
@@ -121,12 +144,23 @@ pub fn run_batch(
                     &destination,
                 )
             });
-        if result.is_ok() {
+        let succeeded = result.is_ok();
+        if succeeded {
             summary.succeeded += 1;
         } else {
             summary.failed += 1;
         }
         notify(BatchEvent::Finished { index, result });
+        if succeeded && let Some(config) = upload {
+            notify(BatchEvent::UploadStarted { index });
+            let result = upload_result(config, &destination);
+            if result.is_ok() {
+                summary.uploaded += 1;
+            } else {
+                summary.upload_failed += 1;
+            }
+            notify(BatchEvent::UploadFinished { index, result });
+        }
     }
     Ok(summary)
 }
