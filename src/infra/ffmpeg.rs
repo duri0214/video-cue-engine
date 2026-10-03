@@ -1,4 +1,5 @@
 use std::{
+    fs,
     io::Read,
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -7,9 +8,10 @@ use std::{
 use serde::Deserialize;
 use thiserror::Error;
 
-use crate::domain::detection::MotionSample;
+use crate::domain::{detection::MotionSample, highlight::HighlightSegment};
 
 pub const SAMPLE_RATE: usize = 5;
+pub const HIGHLIGHT_FRAME_RATE: u64 = 15;
 const FRAME_WIDTH: usize = 160;
 const FRAME_HEIGHT: usize = 90;
 const FRAME_BYTES: usize = FRAME_WIDTH * FRAME_HEIGHT;
@@ -25,6 +27,8 @@ pub enum MediaError {
     Decode { path: PathBuf, reason: String },
     #[error("cannot create event clip {path}: {reason}")]
     Clip { path: PathBuf, reason: String },
+    #[error("cannot create highlight video {path}: {reason}")]
+    Highlight { path: PathBuf, reason: String },
 }
 
 #[derive(Debug)]
@@ -279,4 +283,163 @@ pub fn create_clip(input: &Path, output: &Path, start: f64, end: f64) -> Result<
         });
     }
     Ok(())
+}
+
+pub fn create_highlight(
+    input: &Path,
+    output: &Path,
+    segments: &[HighlightSegment],
+) -> Result<(), MediaError> {
+    let font = highlight_font().ok_or_else(|| MediaError::Highlight {
+        path: output.to_path_buf(),
+        reason: "no suitable system font found for the source timecode".to_owned(),
+    })?;
+    let fontfile = font
+        .to_string_lossy()
+        .replace('\\', "/")
+        .replace(':', r"\\:")
+        .replace(',', r"\\,");
+    let selection = segments
+        .iter()
+        .map(|segment| {
+            format!(
+                "between(n\\,{}\\,{})",
+                segment.start_frame,
+                segment.end_frame.saturating_sub(1)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("+");
+    let filter = format!(
+        "setpts=PTS-STARTPTS,fps=fps={HIGHLIGHT_FRAME_RATE}:start_time=0,select='{selection}',\
+         scale=w=trunc(min(960\\,max(320\\,iw))/2)*2:h=-2,\
+         drawtext=fontfile={fontfile}:text='%{{pts\\:hms}}':fontcolor=white:fontsize=22:\
+         box=1:boxcolor=black@0.7:boxborderw=5:x=8:y=h-th-8,\
+         setpts=N/({HIGHLIGHT_FRAME_RATE}*TB)"
+    );
+    let result = Command::new("ffmpeg")
+        .args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-xerror",
+            "-nostdin",
+            "-y",
+            "-i",
+        ])
+        .arg(input)
+        .args([
+            "-map",
+            "0:v:0",
+            "-an",
+            "-sn",
+            "-vf",
+            &filter,
+            "-pix_fmt",
+            "yuv420p",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "28",
+            "-movflags",
+            "+faststart",
+        ])
+        .arg(output)
+        .output()
+        .map_err(|error| MediaError::Highlight {
+            path: output.to_path_buf(),
+            reason: format!("could not run ffmpeg: {error}"),
+        })?;
+    if !result.status.success() {
+        let _ = fs::remove_file(output);
+        let reason = String::from_utf8_lossy(&result.stderr).trim().to_owned();
+        return Err(MediaError::Highlight {
+            path: output.to_path_buf(),
+            reason: if reason.is_empty() {
+                format!("ffmpeg exited with {}", result.status)
+            } else {
+                reason
+            },
+        });
+    }
+    Ok(())
+}
+
+fn highlight_font() -> Option<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Some(windows) = std::env::var_os("WINDIR") {
+        let fonts = PathBuf::from(windows).join("Fonts");
+        candidates.push(fonts.join("consola.ttf"));
+        candidates.push(fonts.join("arial.ttf"));
+    }
+    candidates.extend([
+        PathBuf::from("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"),
+        PathBuf::from("/usr/share/fonts/truetype/liberation2/LiberationMono-Regular.ttf"),
+        PathBuf::from("/System/Library/Fonts/Menlo.ttc"),
+    ]);
+    candidates.into_iter().find(|path| path.is_file())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::process::Command;
+
+    #[test]
+    fn highlight_renders_a_hundred_separated_segments_in_one_video() {
+        let temp = tempfile::tempdir().unwrap();
+        let input = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures")
+            .join("scene-motion.mp4");
+        let output = temp.path().join("highlights.mp4");
+        let segments = (0..100)
+            .map(|index| HighlightSegment {
+                start_frame: index * 2,
+                end_frame: index * 2 + 1,
+            })
+            .collect::<Vec<_>>();
+
+        create_highlight(&input, &output, &segments).unwrap();
+
+        let probe = Command::new("ffprobe")
+            .args([
+                "-v",
+                "error",
+                "-show_entries",
+                "stream=nb_frames",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+            ])
+            .arg(&output)
+            .output()
+            .unwrap();
+        assert!(probe.status.success());
+        assert_eq!(String::from_utf8_lossy(&probe.stdout).trim(), "100");
+    }
+
+    #[test]
+    fn highlight_write_failure_reports_output_and_ffmpeg_reason() {
+        let temp = tempfile::tempdir().unwrap();
+        let input = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures")
+            .join("scene-motion.mp4");
+        let output = temp.path().join("missing").join("highlights.mp4");
+        let segments = [HighlightSegment {
+            start_frame: 15,
+            end_frame: 30,
+        }];
+
+        let error = create_highlight(&input, &output, &segments).unwrap_err();
+
+        match error {
+            MediaError::Highlight { path, reason } => {
+                assert_eq!(path, output);
+                assert!(!reason.is_empty());
+            }
+            other => panic!("unexpected error: {other}"),
+        }
+        assert!(!output.exists());
+    }
 }

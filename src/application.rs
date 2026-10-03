@@ -7,8 +7,11 @@ use serde::Serialize;
 use thiserror::Error;
 
 use crate::{
-    domain::detection::{ConfigError, DetectionConfig, detect_events},
-    infra::ffmpeg::{self, MediaError, SAMPLE_RATE},
+    domain::{
+        detection::{ConfigError, DetectionConfig, detect_events},
+        highlight::plan_highlight,
+    },
+    infra::ffmpeg::{self, HIGHLIGHT_FRAME_RATE, MediaError, SAMPLE_RATE},
 };
 
 const CLIP_PADDING_SECONDS: f64 = 1.0;
@@ -42,6 +45,7 @@ pub enum RunError {
 struct Analysis {
     schema_version: u32,
     input: AnalysisInput,
+    highlight_path: Option<String>,
     events: Vec<AnalysisEvent>,
 }
 
@@ -57,6 +61,7 @@ struct AnalysisEvent {
     end_seconds: f64,
     peak_change_ratio: f64,
     clip_path: String,
+    highlight_start_seconds: f64,
 }
 
 pub fn run(options: RunOptions) -> Result<(), RunError> {
@@ -79,13 +84,28 @@ pub fn run(options: RunOptions) -> Result<(), RunError> {
         video.duration_seconds,
         config,
     );
+    let highlight = plan_highlight(
+        &events,
+        video.duration_seconds,
+        CLIP_PADDING_SECONDS,
+        HIGHLIGHT_FRAME_RATE,
+    );
 
     prepare_output(&options.output)?;
     let mut analysis_events = Vec::with_capacity(events.len());
     if !events.is_empty() {
+        ffmpeg::create_highlight(
+            &input,
+            &options.output.join("highlights.mp4"),
+            &highlight.segments,
+        )?;
         create_directory(&options.output.join("events"))?;
     }
-    for (index, event) in events.iter().enumerate() {
+    for (index, (event, highlight_start_seconds)) in events
+        .iter()
+        .zip(&highlight.event_start_seconds)
+        .enumerate()
+    {
         let clip_path = format!("events/event-{:03}.mp4", index + 1);
         let clip_start = (event.start_seconds - CLIP_PADDING_SECONDS).max(0.0);
         let clip_end = (event.end_seconds + CLIP_PADDING_SECONDS).min(video.duration_seconds);
@@ -100,15 +120,17 @@ pub fn run(options: RunOptions) -> Result<(), RunError> {
             end_seconds: event.end_seconds,
             peak_change_ratio: event.peak_change_ratio,
             clip_path,
+            highlight_start_seconds: *highlight_start_seconds,
         });
     }
 
     let analysis = Analysis {
-        schema_version: 1,
+        schema_version: 2,
         input: AnalysisInput {
             path: portable_input_path(&input),
             duration_seconds: video.duration_seconds,
         },
+        highlight_path: (!events.is_empty()).then(|| "highlights.mp4".to_owned()),
         events: analysis_events,
     };
     let mut json = serde_json::to_vec_pretty(&analysis)?;

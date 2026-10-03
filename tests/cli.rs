@@ -20,7 +20,7 @@ fn run_cli(input: &Path, output: &Path) -> std::process::Output {
 }
 
 #[test]
-fn cli_detects_known_motion_and_creates_playable_clips() {
+fn cli_detects_known_motion_and_creates_playable_videos() {
     let temp = tempdir().unwrap();
     let output_dir = temp.path().join("result");
     let result = run_cli(&fixture("scene-motion.mp4"), &output_dir);
@@ -34,12 +34,50 @@ fn cli_detects_known_motion_and_creates_playable_clips() {
         serde_json::from_slice(&fs::read(output_dir.join("analysis.json")).unwrap()).unwrap();
     let truth: Value =
         serde_json::from_slice(&fs::read(fixture("ground-truth.json")).unwrap()).unwrap();
-    assert_eq!(analysis["schema_version"], 1);
+    assert_eq!(analysis["schema_version"], 2);
     assert_eq!(analysis["input"]["duration_seconds"], 14.0);
     assert!(Path::new(analysis["input"]["path"].as_str().unwrap()).is_file());
+    assert_eq!(analysis["highlight_path"], "highlights.mp4");
+    let highlight = output_dir.join(analysis["highlight_path"].as_str().unwrap());
+    assert!(highlight.is_file());
+    let highlight_probe = Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration:stream=nb_frames,width,height",
+            "-of",
+            "json",
+        ])
+        .arg(&highlight)
+        .output()
+        .unwrap();
+    assert!(highlight_probe.status.success(), "invalid highlight");
+    let highlight_info: Value = serde_json::from_slice(&highlight_probe.stdout).unwrap();
+    let highlight_duration: f64 = highlight_info["format"]["duration"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert!((10.8..11.6).contains(&highlight_duration));
+    assert!(
+        highlight_info["streams"][0]["nb_frames"]
+            .as_str()
+            .unwrap()
+            .parse::<u64>()
+            .unwrap()
+            > 150
+    );
     let events = analysis["events"].as_array().unwrap();
     let expected = truth["events"].as_array().unwrap();
     assert_eq!(events.len(), expected.len());
+    for (event, target_position) in events.iter().zip([1.0, 5.0, 8.6]) {
+        let position = event["highlight_start_seconds"].as_f64().unwrap();
+        assert!(
+            (position - target_position).abs() < 0.3,
+            "unexpected highlight position: {position}"
+        );
+    }
 
     for (event, expected) in events.iter().zip(expected) {
         for field in ["start_seconds", "end_seconds"] {
@@ -96,6 +134,8 @@ fn cli_writes_no_events_for_a_still_video() {
     let analysis: Value =
         serde_json::from_slice(&fs::read(output_dir.join("analysis.json")).unwrap()).unwrap();
     assert!(analysis["events"].as_array().unwrap().is_empty());
+    assert!(analysis["highlight_path"].is_null());
+    assert!(!output_dir.join("highlights.mp4").exists());
 }
 
 #[test]
