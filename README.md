@@ -5,7 +5,7 @@
 ## 必要なもの
 
 - Rust / Cargo
-- `ffmpeg` と `ffprobe` が `PATH` 上にあること。動画作成には `libx264` と `drawtext` 対応の FFmpeg が必要です。タイムコードの描画には、Windows では Consolas または Arial、Linux では DejaVu Sans Mono または Liberation Mono、macOS では Menlo のシステムフォントを使用します。
+- `ffmpeg` と `ffprobe` が `PATH` 上にあること。動画作成には `libx264` と `drawtext` 対応の FFmpeg が必要です。
 
 ## ローカル画面から一括解析（Windows）
 
@@ -15,17 +15,15 @@
 cargo build --release --features gui --bin video-cue-engine-gui
 ```
 
-`target\release\video-cue-engine-gui.exe` をダブルクリックすると起動します。ビルド済みの実行ファイルを利用する人には Rust、Django、ブラウザは不要です。FFmpeg / ffprobe は利用者の PC にインストールし、`PATH` に追加してください。現段階ではインストーラーや FFmpeg の同梱は行いません。
+ローカル解析だけなら、`target\release\video-cue-engine-gui.exe` をダブルクリックして起動できます。Django に転送する場合は、下の [Django ビューアへの任意送信](#django-ビューアへの任意送信) に従い、環境変数を設定した PowerShell から GUI を起動してください。ビルド済みの実行ファイルでローカル解析する場合、Rust、Django、ブラウザは不要です。FFmpeg / ffprobe は利用者の PC にインストールし、`PATH` に追加してください。
 
 1. 「入力フォルダを選ぶ」で録画フォルダを選びます。直下にある `.mp4` / `.MP4` の通常ファイルだけを、ファイル名順に一覧表示します。サブフォルダとシンボリックリンクは対象外です。
 2. 対象件数と一覧を確認します。ファイルを追加・削除した場合は「再読み込み」で一覧を更新します。
-3. 出力先を確認します。Windows の初期値は Known Folder API が示す現在の「ダウンロード」です。移動済みの場所にも対応します。「出力フォルダを変更」で別の既存フォルダを選べます。
-4. 「一括解析を開始」を押します。出力先の存在、読み取り、子フォルダ作成・書き込み、FFmpeg / ffprobe の起動を確認してから、表示した動画を順番に解析します。存在しない出力先は作成せず、理由を画面に表示します。
+3. 出力先を確認します。初期値は現在の「ダウンロード」フォルダです。「出力フォルダを変更」で別の既存フォルダを選べます。
+4. 「一括解析を開始」を押します。出力先や FFmpeg / ffprobe に問題がある場合は、画面に理由を表示します。
 5. 動画ごとの状態、完了・失敗件数を確認します。失敗した動画の理由を表示し、次の動画へ進みます。終了後は「今回の出力フォルダを開く」で結果を確認できます。
 
-配色は `vj-copilot` と同じ暗い背景・ミント色です。日本語表示には Windows のメイリオを使用します。解析中もスクロールと画面更新は継続します。処理の途中終了には対応していないため、実行中のフォルダ変更・再実行・ウィンドウ終了は抑止します。
-
-実行ごとに `video-cue-engine-batch-` で始まる一意のフォルダを作り、その下の `0001`、`0002` … に一覧と同じ順番で保存します。長いファイル名や大文字・小文字の違いによる出力先の衝突を避けるため、動画の保存先は番号にしています。元動画は画面の一覧と各 `analysis.json` の `input.path` で確認できます。再実行時は別のフォルダになり、以前の結果を上書きしません。
+結果は、実行ごとに作る `video-cue-engine-batch-` フォルダ内の `0001`、`0002` … に保存します。元動画は画面の一覧か各 `analysis.json` の `input.path` で確認できます。再実行すると別の結果フォルダを作ります。
 
 ```text
 選択した出力フォルダ/
@@ -38,9 +36,7 @@ cargo build --release --features gui --bin video-cue-engine-gui
         └── analysis.json
 ```
 
-動きのない動画は `analysis.json` だけを作成します。失敗時は途中の出力を残す場合があるため、画面の成功・失敗を確認してください。解析設定は CLI の初期値と同じです。
-
-GUI は `gui` feature と専用バイナリに分離しています。検出・出力規則と順次処理はライブラリの `BatchPlan::scan` / `run_batch` に置き、GUI は別スレッドからの通知を表示します。CLI のみなら GUI 依存のビルドは不要です。GUI の動作確認対象は Windows です。
+動きのない動画は `analysis.json` だけを作成します。失敗時は途中の出力を残す場合があるため、画面の成功・失敗を確認してください。
 
 ### Django ビューアへの任意送信
 
@@ -85,9 +81,7 @@ GUI は `gui` feature と専用バイナリに分離しています。検出・�
 
 `VIDEO_CUE_UPLOAD_URL` または `VIDEO_CUE_UPLOAD_TOKEN` が未設定のまま送信を開始すると、それぞれ「VIDEO_CUE_UPLOAD_URL を設定してください。」「VIDEO_CUE_UPLOAD_TOKEN を設定してください。」と表示されます。設定後に同じ PowerShell から再実行してください。GUI では送信設定が不足していると解析開始前にエラーを表示します。
 
-送信成功時は動画 ID と、新規登録か既存結果の再送確認かを表示します。送信が失敗してもローカル成果物は残ります。GUI では動画ごとに送信成功・失敗と理由が表示され、失敗した行の「ローカル成果物から再送」で再解析せずに送れます。GUI を閉じた後や CLI で失敗した後も、上の `--upload-existing` で結果フォルダから再送できます。送信先は `POST /video_cue/api/results/<動画ID>/` で、`analysis` と任意の `highlight` の multipart ファイル項目を使用します。動画 ID は成果物の内容から計算するため、同じ成果物を再送すると同じ ID になり、Django は 200 を返します。異なる内容が同じ ID に存在する場合の 409 は成功扱いにしません。認証トークンは環境変数と Authorization ヘッダーだけに使用し、結果 JSON とエラー表示には含めません。接続・応答を含む送信のタイムアウトは120秒です。
-
-JSON の上限は8 MiB、ハイライトは128 MiBです。ハイライトの H.264、15 fps、横幅320～960 px、CRF 28 の画質・容量方針は下記のとおりです。上限を超える成果物は送信前に失敗として表示され、元の成果物は保持されます。
+送信成功時は動画 ID と、新規登録か再送確認かを表示します。送信が失敗してもローカル成果物は残ります。GUI では動画ごとに送信結果と理由が表示され、失敗した行の「ローカル成果物から再送」で再解析せずに送れます。GUI を閉じた後や CLI で失敗した後は、上の `--upload-existing` で結果フォルダから再送できます。容量超過などで送信できない場合も、理由が表示されます。
 
 ## CLI から単一 MP4 を解析
 
@@ -105,7 +99,7 @@ cargo run --release -- --input /path/to/recording.mp4 --output /path/to/result-f
 | `--min-duration` | `0.4` | イベントとみなす最短の秒数 |
 | `--merge-gap` | `0.6` | 動きの間に挟まる静止区間を結合する最大秒数 |
 
-解析では毎秒 5 フレームを 160 × 90 のグレースケールに縮小し、前フレームから輝度が 20 以上変わった画素の割合を測ります。しきい値を超えた区間を結合してから最短時間を適用します。カメラの揺れや照明の変化も動きとして検出されるため、実録画では `--threshold` を素材に合わせて調整してください。
+カメラの揺れや照明の変化も動きとして検出されるため、実録画では `--threshold` を素材に合わせて調整してください。
 
 出力例:
 
@@ -119,32 +113,6 @@ result/
         └── event-002.mp4
 ```
 
-```json
-{
-  "schema_version": 2,
-  "input": {
-    "path": "/absolute/path/to/recording.mp4",
-    "duration_seconds": 14.0
-  },
-  "highlight_path": "highlights.mp4",
-  "events": [
-    {
-      "start_seconds": 2.0,
-      "end_seconds": 4.0,
-      "peak_change_ratio": 0.02,
-      "clip_path": "events/event-001.mp4",
-      "highlight_start_seconds": 1.0
-    }
-  ]
-}
-```
-
-`start_seconds` と `end_seconds` は入力動画の先頭からの秒数、`highlight_start_seconds` はハイライト動画の先頭からイベントを頭出しする秒数です。`peak_change_ratio` はイベント中に観測した最大の変化画素割合です。クリップとハイライトにはイベントの前後に各 1 秒の余白を付け、動画の先頭・末尾で切り詰めます。ハイライトでは重なる余白を結合して同じ映像を重複させず、静止区間を飛ばします。映像内の `HH:MM:SS.mmm` は入力動画の先頭からの経過時刻です。音声は含めません。
-
-ハイライトは H.264 / MP4、15 fps、横幅 320～960 px（縦横比を維持）、`libx264` の `veryfast`・CRF 28、`yuv420p` で出力します。確認用の文字と動きを読める解像度を確保しつつ、長尺の元動画を転送せずに済む設定です。イベントごとのクリップは従来どおり CRF 23 で出力します。
-
-形式バージョン 2 では既存の `input` とイベントの時刻・変化量・`clip_path` を維持し、`highlight_path` と `highlight_start_seconds` を追加しました。イベントが 0 件なら `events` は空配列、`highlight_path` は `null` で、ハイライトとイベントクリップは作成しません。FFmpeg によるハイライトの書き出しが失敗した場合は原因と出力先を示して異常終了し、`analysis.json` は作成しません。
-
 ## テスト素材と検証
 
 [`fixtures/`](fixtures/README.md) に短い定点カメラ風 MP4、正解時刻、再生成スクリプトがあります。再生成には Python 3 と FFmpeg を使います。
@@ -156,7 +124,7 @@ cargo test --all-targets
 cargo clippy --all-targets --all-features -- -D warnings
 ```
 
-GUI を含むビルド・テストは `cargo test --all-targets --all-features` で確認できます。一括処理の統合テストでは、直下の MP4 検出、出力先エラー、FFmpeg 不在、壊れた動画の後の継続、プレビュー後のファイル削除、再実行時の既存結果保護を確認します。Windows では一時フォルダに読み取り・書き込み拒否の ACL を設定するテストも実行し、終了時に解除します（Windows PowerShell を使用）。GUI のテストはネイティブのフォルダ選択結果を差し替え、実際に描画した開始ボタンへのクリック、出力先エラー後の再実行、ワーカーからの完了表示までを画面なしで検証します。
+GUI を含むテストは `cargo test --all-targets --all-features` で実行できます。
 
 Windows で画面を確認する場合は、リポジトリ直下の PowerShell で次を実行します。
 
@@ -184,5 +152,3 @@ $batchCheckOutput
 Issue 番号付きブランチで作業し、変更の検証後にコミット・push・PR 作成へ進む。詳細は `AGENTS.md` の常用フローに従う。
 
 Rust コード・依存関係の変更では、`AGENTS.md` に記載した `cargo fmt`・`cargo test`・`cargo clippy` を実行する。
-
-移植元: [duri0214/vj-copilot（1342e882）](https://github.com/duri0214/vj-copilot/tree/1342e882e0753f72c14d06a9f3c46095e5e9ba9f)。プロジェクト名、スキルへのリンク、文書のみの検証、レビューと修正の適用条件を本リポジトリ向けに調整している。
