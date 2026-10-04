@@ -76,16 +76,11 @@ $env:VIDEO_CUE_UPLOAD_TOKEN = Read-Host 'Django と engine に共通のトーク
 
 ### GUI から送信する
 
-GUI で解析・送信する場合、CLI の `--input`、`--output`、`--upload` は入力しません。環境変数を設定した同じ PowerShell から、ビルド済みの GUI を起動します。
+GUI で解析・送信する場合、CLI の `--input`、`--output`、`--upload` は入力しません。環境変数を設定した同じ PowerShell から、上の「GUI をビルドして起動する」の手順で GUI を起動します。PowerShell の環境変数は、エクスプローラーから起動した GUI には渡りません。
 
-```powershell
-$guiExe = (Resolve-Path .\target\release\video-cue-engine-gui.exe).Path
-& $guiExe
-```
+GUI で入力フォルダと出力先を選び、「処理完了後に Django へ転送」をオンにしてから「一括解析を開始」を押します。このチェックは初期状態でオフです。オンにした回だけ、解析に成功した各動画の `analysis.json` と、イベントがある場合の `highlights.mp4` を送ります。イベント0件では JSON だけを送ります。元 MP4 と `events/` の個別クリップは送信しません。
 
-PowerShell の環境変数は、エクスプローラーから起動した GUI には渡りません。GUI で入力フォルダと出力先を選び、「処理完了後に Django へ転送」をオンにしてから「一括解析を開始」を押します。このチェックは初期状態でオフです。オンにした回だけ、解析に成功した各動画の `analysis.json` と、イベントがある場合の `highlights.mp4` を送ります。イベント0件では JSON だけを送ります。元 MP4 と `events/` の個別クリップは送信しません。
-
-`VIDEO_CUE_UPLOAD_URL` または `VIDEO_CUE_UPLOAD_TOKEN` が未設定のまま送信を開始すると、それぞれ「VIDEO_CUE_UPLOAD_URL を設定してください。」「VIDEO_CUE_UPLOAD_TOKEN を設定してください。」と表示されます。設定後に同じ PowerShell から再実行してください。GUI では送信設定が不足していると解析開始前にエラーを表示します。
+`VIDEO_CUE_UPLOAD_URL` または `VIDEO_CUE_UPLOAD_TOKEN` が未設定のまま送信を開始すると、エラーが表示されます。設定後に同じ PowerShell から再実行してください。
 
 送信成功時は動画 ID と、新規登録か再送確認かを表示します。送信が失敗してもローカル成果物は残ります。GUI では動画ごとに送信結果と理由が表示され、失敗した行の「ローカル成果物から再送」で再解析せずに送れます。容量超過などで送信できない場合も、理由が表示されます。
 
