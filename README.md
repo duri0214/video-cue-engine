@@ -23,9 +23,11 @@ Write-Output $guiExe
 & $guiExe
 ```
 
-ローカル解析だけなら、エクスプローラーでこの `.exe` をダブルクリックしても起動できます。Django に転送する場合は、下の [Django ビューアへ送信する](#django-ビューアへ送信する) に従い、環境変数を設定した PowerShell から GUI を起動してください。ビルド済みの実行ファイルでローカル解析する場合、Rust、Django、ブラウザは不要です。FFmpeg / ffprobe は利用者の PC にインストールし、`PATH` に追加してください。
+ローカル解析だけなら、エクスプローラーでこの `.exe` をダブルクリックしても起動できます。ビルド済みの実行ファイルでローカル解析する場合、Rust、Django、ブラウザは不要です。FFmpeg / ffprobe は利用者の PC にインストールし、`PATH` に追加してください。
 
-## GUI を使う（Windows）
+## ビルドしたアプリケーションを使う（Windows）
+
+ビルドした GUI でローカル解析を行います。Django に転送する場合は、[Django ビューアへ送信する](#django-ビューアへ送信する) の設定を先に済ませ、環境変数を設定した同じ PowerShell から GUI を起動してください。Django への送信設定は GUI と CLI に共通です。
 
 1. 「入力フォルダを選ぶ」で録画フォルダを選びます。直下にある `.mp4` / `.MP4` の通常ファイルだけを、ファイル名順に一覧表示します。サブフォルダとシンボリックリンクは対象外です。
 2. 対象件数と一覧を確認します。ファイルを追加・削除した場合は「再読み込み」で一覧を更新します。
@@ -50,7 +52,7 @@ Write-Output $guiExe
 
 ## Django ビューアへ送信する
 
-送信先の `portfolio` に [`docs/video-cue-viewer.md`](https://github.com/duri0214/portfolio/blob/master/docs/video-cue-viewer.md) の受信 API を用意し、Django 側と engine 側に同じ `VIDEO_CUE_UPLOAD_TOKEN` を設定します。トークンを URL、`analysis.json`、ソースコード、リポジトリに書かないでください。
+この設定は GUI と CLI に共通です。送信先の `portfolio` に [`docs/video-cue-viewer.md`](https://github.com/duri0214/portfolio/blob/master/docs/video-cue-viewer.md) の受信 API を用意し、Django 側と engine 側に同じ `VIDEO_CUE_UPLOAD_TOKEN` を設定します。トークンを URL、`analysis.json`、ソースコード、リポジトリに書かないでください。
 
 ### ローカル開発環境へ送信する
 
