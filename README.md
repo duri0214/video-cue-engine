@@ -7,7 +7,7 @@
 - Rust / Cargo
 - `ffmpeg` と `ffprobe` が `PATH` 上にあること。動画作成には `libx264` と `drawtext` 対応の FFmpeg が必要です。
 
-## ローカル画面から一括解析（Windows）
+## GUI をビルドして起動する（Windows）
 
 開発者は次のコマンドで GUI の実行ファイルをビルドします。
 
@@ -23,7 +23,9 @@ Write-Output $guiExe
 & $guiExe
 ```
 
-ローカル解析だけなら、エクスプローラーでこの `.exe` をダブルクリックしても起動できます。Django に転送する場合は、下の [Django ビューアへの任意送信](#django-ビューアへの任意送信) に従い、環境変数を設定した PowerShell から GUI を起動してください。ビルド済みの実行ファイルでローカル解析する場合、Rust、Django、ブラウザは不要です。FFmpeg / ffprobe は利用者の PC にインストールし、`PATH` に追加してください。
+ローカル解析だけなら、エクスプローラーでこの `.exe` をダブルクリックしても起動できます。Django に転送する場合は、下の [Django ビューアへ送信する](#django-ビューアへ送信する) に従い、環境変数を設定した PowerShell から GUI を起動してください。ビルド済みの実行ファイルでローカル解析する場合、Rust、Django、ブラウザは不要です。FFmpeg / ffprobe は利用者の PC にインストールし、`PATH` に追加してください。
+
+## GUI でフォルダを一括解析する（Windows）
 
 1. 「入力フォルダを選ぶ」で録画フォルダを選びます。直下にある `.mp4` / `.MP4` の通常ファイルだけを、ファイル名順に一覧表示します。サブフォルダとシンボリックリンクは対象外です。
 2. 対象件数と一覧を確認します。ファイルを追加・削除した場合は「再読み込み」で一覧を更新します。
@@ -46,11 +48,11 @@ Write-Output $guiExe
 
 動きのない動画は `analysis.json` だけを作成します。失敗時は途中の出力を残す場合があるため、画面の成功・失敗を確認してください。
 
-### Django ビューアへの任意送信
+## Django ビューアへ送信する
 
 送信先の `portfolio` に [`docs/video-cue-viewer.md`](https://github.com/duri0214/portfolio/blob/master/docs/video-cue-viewer.md) の受信 API を用意し、Django 側と engine 側に同じ `VIDEO_CUE_UPLOAD_TOKEN` を設定します。トークンを URL、`analysis.json`、ソースコード、リポジトリに書かないでください。
 
-#### ローカル開発環境で試す
+### ローカル開発環境で試す
 
 これは Django の開発サーバーを使って動作確認する場合の手順です。`portfolio` のリポジトリ直下で PowerShell を開き、Django を起動する前にトークンを設定します。
 
@@ -66,7 +68,7 @@ $env:VIDEO_CUE_UPLOAD_URL = 'http://127.0.0.1:8000/video_cue/api/results/'
 $env:VIDEO_CUE_UPLOAD_TOKEN = Read-Host 'Django と engine に共通のトークン'
 ```
 
-#### 本番環境へ送信する
+### 本番環境へ送信する
 
 本番では Django の `.env`、サービス設定、シークレット管理など、Django を起動する仕組みで `VIDEO_CUE_UPLOAD_TOKEN` を設定します。`runserver` は本番起動方法として使用しません。
 
@@ -81,7 +83,7 @@ $env:VIDEO_CUE_UPLOAD_TOKEN = Read-Host 'Django と engine に共通のトーク
 
 `Read-Host` で入力した値は、その PowerShell セッションの環境変数としてだけ有効で、そこから起動した子プロセスに引き継がれます。PowerShell を開き直したら、engine 側で再設定してください。
 
-#### CLI から送信する
+### CLI から送信する
 
 ローカル開発環境または本番環境の設定を済ませた engine 側 PowerShell から起動します。CLI で新しく解析して送る場合は `--upload` を付けます。次のコマンドは同梱素材を解析し、毎回新しい一時フォルダにローカル成果物を保存してから送信します。送信済みの成果物を再解析せずに送る場合は、結果フォルダを指定して `--upload-existing` を実行します。
 
@@ -94,7 +96,7 @@ cargo run --release -- --upload-existing (Join-Path $videoCueOutput 'video-cue-e
 
 `--input` / `--output` だけの CLI 実行は送信しません。
 
-#### GUI から送信する
+### GUI から送信する
 
 GUI で解析・送信する場合、CLI の `--input`、`--output`、`--upload` は入力しません。環境変数を設定した **同じ PowerShell** から、ビルド済みの GUI を起動します。ビルド済みなら次の 2 行だけで起動できます。
 
