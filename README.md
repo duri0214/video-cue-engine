@@ -27,7 +27,7 @@ Write-Output $guiExe
 
 ## ビルドしたアプリケーションを使う（Windows）
 
-ビルドした GUI でローカル解析を行います。Django に転送する場合は、[Django ビューアへ送信する](#django-ビューアへ送信する) の設定を先に済ませ、環境変数を設定した同じ PowerShell から GUI を起動してください。Django への送信設定は GUI と CLI に共通です。
+ビルドした GUI でローカル解析を行います。Django に転送する場合は、[Django ビューアへの送信設定](#django-ビューアへの送信設定)を先に済ませ、環境変数を設定した同じ PowerShell から GUI を起動してください。Django への送信設定は GUI と CLI に共通です。
 
 1. 「入力フォルダを選ぶ」で録画フォルダを選びます。直下にある `.mp4` / `.MP4` の通常ファイルだけを、ファイル名順に一覧表示します。サブフォルダとシンボリックリンクは対象外です。
 2. 対象件数と一覧を確認します。ファイルを追加・削除した場合は「再読み込み」で一覧を更新します。
@@ -50,11 +50,11 @@ Write-Output $guiExe
 
 動きのない動画は `analysis.json` だけを作成します。失敗時は途中の出力を残す場合があるため、画面の成功・失敗を確認してください。
 
-## Django ビューアへ送信する
+## Django ビューアへの送信設定
 
 この設定は GUI と CLI に共通です。Django 側でサーバーを起動し、Django の環境変数 `VIDEO_CUE_UPLOAD_TOKEN` にトークンを設定します。engine 側の PowerShell にも、同じ値を環境変数 `VIDEO_CUE_UPLOAD_TOKEN` として設定してください。送信先 API は `/video_cue/api/results/` です。トークンを URL、`analysis.json`、ソースコード、リポジトリに書かないでください。
 
-### ローカル開発環境へ送信する
+### ローカル開発環境の設定
 
 engine 側の PowerShell で、Django 側と同じトークンとローカル用 URL を環境変数に設定します。
 
@@ -63,7 +63,7 @@ $env:VIDEO_CUE_UPLOAD_URL = 'http://127.0.0.1:8000/video_cue/api/results/'
 $env:VIDEO_CUE_UPLOAD_TOKEN = Read-Host 'Django と engine に共通のトークン'
 ```
 
-### 本番環境へ送信する
+### 本番環境の設定
 
 engine 側の PowerShell で、本番用の HTTPS URL と環境変数を設定します。
 
