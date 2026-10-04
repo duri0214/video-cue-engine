@@ -21,21 +21,28 @@ struct Request {
 }
 
 fn serve(statuses: Vec<u16>) -> (String, thread::JoinHandle<Vec<Request>>) {
+    serve_responses(statuses.into_iter().map(|status| (status, None)).collect())
+}
+
+fn serve_responses(
+    responses: Vec<(u16, Option<String>)>,
+) -> (String, thread::JoinHandle<Vec<Request>>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!(
         "http://{}/video_cue/api/results/",
         listener.local_addr().unwrap()
     );
     let worker = thread::spawn(move || {
-        statuses
+        responses
             .into_iter()
-            .map(|status| {
+            .map(|(status, response_body)| {
                 let (mut stream, _) = listener.accept().unwrap();
                 stream.set_read_timeout(Some(Duration::from_secs(30))).unwrap();
                 let request = read_request(&mut stream);
                 let key = request.path.trim_end_matches('/').rsplit('/').next().unwrap();
                 let created = status == 201;
-                let body = json!({"key": key, "created": created}).to_string();
+                let body = response_body
+                    .unwrap_or_else(|| json!({"key": key, "created": created}).to_string());
                 write!(
                     stream,
                     "HTTP/1.1 {status} Test\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
@@ -214,6 +221,35 @@ fn failed_upload_keeps_results_and_reports_each_video() {
         }
     )));
     assert_eq!(worker.join().unwrap().len(), 2);
+}
+
+#[test]
+fn server_json_error_is_reported_without_exposing_token() {
+    let output = tempdir().unwrap();
+    result(output.path(), true);
+    let (url, worker) = serve_responses(vec![(
+        500,
+        Some(
+            json!({
+                "error": "保存に失敗しました。private-token\r\n"
+            })
+            .to_string(),
+        ),
+    )]);
+    let config = UploadConfig::new(&url, "private-token").unwrap();
+
+    let error = upload_result(&config, output.path()).unwrap_err();
+    let message = error.to_string();
+
+    assert!(matches!(
+        error,
+        UploadError::HttpMessage { status: 500, .. }
+    ));
+    assert!(message.contains("保存に失敗しました。"));
+    assert!(message.contains("[REDACTED]"));
+    assert!(!message.contains("private-token"));
+    assert!(!message.contains('\n'));
+    assert_eq!(worker.join().unwrap().len(), 1);
 }
 
 #[test]

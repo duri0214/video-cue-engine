@@ -7,7 +7,7 @@ use std::{
 
 use reqwest::{
     Url,
-    blocking::{Client, multipart},
+    blocking::{Client, Response, multipart},
     redirect::Policy,
 };
 use serde::Deserialize;
@@ -106,6 +106,8 @@ pub enum UploadError {
     ServerSizeLimit,
     #[error("送信先が成果物を拒否しました（HTTP {0}）。")]
     Http(u16),
+    #[error("送信先が成果物を拒否しました（HTTP {status}）。サーバー: {message}")]
+    HttpMessage { status: u16, message: String },
     #[error("送信先の成功応答を確認できませんでした。ローカル成果物から再送してください。")]
     InvalidResponse,
 }
@@ -127,6 +129,36 @@ struct AnalysisForUpload {
 struct ServerReceipt {
     key: String,
     created: bool,
+}
+
+#[derive(Deserialize)]
+struct ServerError {
+    error: String,
+}
+
+fn http_error(response: Response, status: u16, token: &str) -> UploadError {
+    let mut body = Vec::new();
+    let message = response
+        .take(4097)
+        .read_to_end(&mut body)
+        .ok()
+        .filter(|size| *size <= 4096)
+        .and_then(|_| serde_json::from_slice::<ServerError>(&body).ok())
+        .and_then(|error| sanitize_server_message(&error.error, token));
+    message.map_or(UploadError::Http(status), |message| {
+        UploadError::HttpMessage { status, message }
+    })
+}
+
+fn sanitize_server_message(message: &str, token: &str) -> Option<String> {
+    let message: String = message
+        .replace(token, "[REDACTED]")
+        .chars()
+        .filter(|character| !character.is_control())
+        .take(512)
+        .collect();
+    let message = message.trim().to_owned();
+    (!message.is_empty()).then_some(message)
 }
 
 /// Upload a completed result directory. The content-derived key is stable across retries.
@@ -239,6 +271,6 @@ pub fn upload_result(
         401 => Err(UploadError::Unauthorized),
         409 => Err(UploadError::Conflict),
         413 => Err(UploadError::ServerSizeLimit),
-        _ => Err(UploadError::Http(status)),
+        _ => Err(http_error(response, status, &config.token)),
     }
 }
