@@ -44,25 +44,48 @@ GUI は `gui` feature と専用バイナリに分離しています。検出・�
 
 ### Django ビューアへの任意送信
 
-送信先の Django で [`portfolio/docs/video-cue-viewer.md`](https://github.com/duri0214/portfolio/blob/master/docs/video-cue-viewer.md) の受信 API と `VIDEO_CUE_UPLOAD_TOKEN` を設定します。engine を起動する PowerShell では次を設定します。遠隔の送信先には HTTPS を使用してください。
+1. **Django 側を設定する。** 送信先の `portfolio` に [`docs/video-cue-viewer.md`](https://github.com/duri0214/portfolio/blob/master/docs/video-cue-viewer.md) の受信 API を用意し、Django プロセスが読む `VIDEO_CUE_UPLOAD_TOKEN` を設定します。本番では `portfolio` の `.env` など、Django の起動設定で管理してください。ローカルで試す場合は、`portfolio` のリポジトリ直下で PowerShell を開き、次のように Django の起動前に設定できます。
 
-```powershell
-$env:VIDEO_CUE_UPLOAD_URL = 'http://127.0.0.1:8000/video_cue/api/results/'
-$env:VIDEO_CUE_UPLOAD_TOKEN = Read-Host 'Django に設定した VIDEO_CUE_UPLOAD_TOKEN'
-```
+   ```powershell
+   $env:VIDEO_CUE_UPLOAD_TOKEN = Read-Host 'Django と engine に共通のトークン'
+   .\.venv\Scripts\python.exe manage.py runserver 127.0.0.1:8000
+   ```
 
-GUI の「処理完了後に Django へ転送」は初期状態でオフです。オンにした回だけ、解析に成功した各動画の `analysis.json` と、イベントがある場合の `highlights.mp4` を送ります。イベント0件では JSON だけを送ります。元 MP4 と `events/` の個別クリップは送信しません。動画ごとに送信成功・失敗と理由が表示され、失敗した行の「ローカル成果物から再送」で再解析せずに送れます。GUI を閉じた後も、下の `--upload-existing` で結果フォルダから再送できます。
+2. **engine 側を設定する。** 別の PowerShell を `video-cue-engine` のリポジトリ直下で開き、Django 側と**同じトークン**を入力します。ローカル Django への送信先は次のとおりです。
 
-CLI では `--upload` を付けた場合だけ、解析後に送信します。従来の `--input` / `--output` だけの実行では通信しません。次はリポジトリ直下で同梱素材を使う例です。
+   ```powershell
+   $env:VIDEO_CUE_UPLOAD_URL = 'http://127.0.0.1:8000/video_cue/api/results/'
+   $env:VIDEO_CUE_UPLOAD_TOKEN = Read-Host 'Django と engine に共通のトークン'
+   ```
 
-```powershell
-$videoCueOutput = Join-Path $env:TEMP ('video-cue-upload-' + [guid]::NewGuid().ToString('N'))
-New-Item -ItemType Directory -Path $videoCueOutput | Out-Null
-cargo run --release -- --input .\fixtures\scene-motion.mp4 --output $videoCueOutput --upload
-cargo run --release -- --upload-existing (Join-Path $videoCueOutput 'video-cue-engine-output')
-```
+   本番 Django に送る場合は、上の URL 設定行を実際のホスト名に置き換えます。URL は **HTTPS** を使い、`/video_cue/api/results/` で終えてください。HTTP を使用できるのは localhost またはループバックアドレスへの送信だけです。
 
-送信成功時は動画 ID と、新規登録か既存結果の再送確認かを表示します。送信が失敗してもローカル成果物は残ります。送信先は `POST /video_cue/api/results/<動画ID>/` で、`analysis` と任意の `highlight` の multipart ファイル項目を使用します。動画 ID は成果物の内容から計算するため、同じ成果物を再送すると同じ ID になり、Django は 200 を返します。異なる内容が同じ ID に存在する場合の 409 は成功扱いにしません。認証トークンは環境変数と Authorization ヘッダーだけに使用し、結果 JSON とエラー表示には含めません。接続・応答を含む送信のタイムアウトは120秒です。
+   ```powershell
+   $env:VIDEO_CUE_UPLOAD_URL = 'https://example.com/video_cue/api/results/'
+   ```
+
+   `Read-Host` で入力した値は、その PowerShell セッションの環境変数としてだけ有効で、そこから起動した子プロセスに引き継がれます。Django 側と engine 側の PowerShell を開き直したら、各々で再設定してください。トークンを URL、`analysis.json`、ソースコード、リポジトリに書かないでください。
+
+3. **同じ engine 側 PowerShell から CLI または GUI を起動する。** CLI で新しく解析して送る場合は `--upload` を付けます。次のコマンドは同梱素材を解析し、毎回新しい一時フォルダにローカル成果物を保存してから送信します。送信済みの成果物を再解析せずに送る場合は、結果フォルダを指定して `--upload-existing` を実行します。
+
+   ```powershell
+   $videoCueOutput = Join-Path $env:TEMP ('video-cue-upload-' + [guid]::NewGuid().ToString('N'))
+   New-Item -ItemType Directory -Path $videoCueOutput | Out-Null
+   cargo run --release -- --input .\fixtures\scene-motion.mp4 --output $videoCueOutput --upload
+   cargo run --release -- --upload-existing (Join-Path $videoCueOutput 'video-cue-engine-output')
+   ```
+
+   `--input` / `--output` だけの CLI 実行は送信しません。GUI を使う場合も、環境変数を設定した **同じ PowerShell** から起動してください。エクスプローラーから実行ファイルをダブルクリックした場合、PowerShell で設定した環境変数は引き継がれません。
+
+   ```powershell
+   cargo run --release --features gui --bin video-cue-engine-gui
+   ```
+
+   GUI で入力フォルダと出力先を選び、「処理完了後に Django へ転送」をオンにしてから「一括解析を開始」を押します。このチェックは初期状態でオフです。オンにした回だけ、解析に成功した各動画の `analysis.json` と、イベントがある場合の `highlights.mp4` を送ります。イベント0件では JSON だけを送ります。元 MP4 と `events/` の個別クリップは送信しません。
+
+`VIDEO_CUE_UPLOAD_URL` または `VIDEO_CUE_UPLOAD_TOKEN` が未設定のまま送信を開始すると、それぞれ「VIDEO_CUE_UPLOAD_URL を設定してください。」「VIDEO_CUE_UPLOAD_TOKEN を設定してください。」と表示されます。設定後に同じ PowerShell から再実行してください。GUI では送信設定が不足していると解析開始前にエラーを表示します。
+
+送信成功時は動画 ID と、新規登録か既存結果の再送確認かを表示します。送信が失敗してもローカル成果物は残ります。GUI では動画ごとに送信成功・失敗と理由が表示され、失敗した行の「ローカル成果物から再送」で再解析せずに送れます。GUI を閉じた後や CLI で失敗した後も、上の `--upload-existing` で結果フォルダから再送できます。送信先は `POST /video_cue/api/results/<動画ID>/` で、`analysis` と任意の `highlight` の multipart ファイル項目を使用します。動画 ID は成果物の内容から計算するため、同じ成果物を再送すると同じ ID になり、Django は 200 を返します。異なる内容が同じ ID に存在する場合の 409 は成功扱いにしません。認証トークンは環境変数と Authorization ヘッダーだけに使用し、結果 JSON とエラー表示には含めません。接続・応答を含む送信のタイムアウトは120秒です。
 
 JSON の上限は8 MiB、ハイライトは128 MiBです。ハイライトの H.264、15 fps、横幅320～960 px、CRF 28 の画質・容量方針は下記のとおりです。上限を超える成果物は送信前に失敗として表示され、元の成果物は保持されます。
 
