@@ -65,11 +65,7 @@ $env:VIDEO_CUE_UPLOAD_TOKEN = Read-Host 'Django と engine に共通のトーク
 
 ### 本番環境へ送信する
 
-本番では Django の `.env`、サービス設定、シークレット管理など、Django を起動する仕組みで `VIDEO_CUE_UPLOAD_TOKEN` を設定します。`runserver` は本番起動方法として使用しません。
-
-engine 側では、Django と同じトークンを設定し、実際のホスト名を使った HTTPS の送信 API URL を指定します。サイトのビューアは `https://www.henojiya.net/video_cue/` ですが、`VIDEO_CUE_UPLOAD_URL` には送信 API の `https://www.henojiya.net/video_cue/api/results/` を設定します。URL は `/video_cue/api/results/` で終えてください。
-
-本番の送信先に HTTP は使わないでください。HTTP を使用できるのは localhost またはループバックアドレスへのローカル開発時だけです。
+engine 側の PowerShell で、本番用の HTTPS URL と環境変数を設定します。
 
 ```powershell
 $env:VIDEO_CUE_UPLOAD_URL = 'https://www.henojiya.net/video_cue/api/results/'
