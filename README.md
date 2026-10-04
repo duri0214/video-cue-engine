@@ -97,7 +97,9 @@ cargo run --release -- --upload-existing (Join-Path $videoCueOutput 'video-cue-e
 
 `--input` / `--output` だけの CLI 実行は送信しません。`--upload` が失敗しても成果物は残るため、`--upload-existing` で再送できます。
 
-## CLI から単一 MP4 を解析
+## CLI の実行例（単一 MP4、任意）
+
+GUI を使わずに単一の MP4 を解析する場合の実行例です。
 
 ```sh
 cargo run --release -- --input /path/to/recording.mp4 --output /path/to/result-folder
