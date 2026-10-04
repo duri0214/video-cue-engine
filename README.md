@@ -56,7 +56,7 @@ Write-Output $guiExe
 
 ### ローカル開発環境へ送信する
 
-これは、Django 側でローカル開発サーバーを起動した状態で送信する場合の手順です。engine 側は別の PowerShell を `video-cue-engine` のリポジトリ直下で開き、同じトークンとローカル用 URL を設定します。
+engine 側の PowerShell で、Django 側と同じトークンとローカル用 URL を環境変数に設定します。
 
 ```powershell
 $env:VIDEO_CUE_UPLOAD_URL = 'http://127.0.0.1:8000/video_cue/api/results/'
