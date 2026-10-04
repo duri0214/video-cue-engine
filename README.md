@@ -52,7 +52,7 @@ Write-Output $guiExe
 
 ## Django ビューアへ送信する
 
-この設定は GUI と CLI に共通です。Django 側でサーバーを起動し、Django の設定に `VIDEO_CUE_UPLOAD_TOKEN` を設定します。engine 側にも同じ値を設定してください。送信先 API は `/video_cue/api/results/` です。トークンを URL、`analysis.json`、ソースコード、リポジトリに書かないでください。
+この設定は GUI と CLI に共通です。Django 側でサーバーを起動し、Django の環境変数 `VIDEO_CUE_UPLOAD_TOKEN` にトークンを設定します。engine 側の PowerShell にも、同じ値を環境変数 `VIDEO_CUE_UPLOAD_TOKEN` として設定してください。送信先 API は `/video_cue/api/results/` です。トークンを URL、`analysis.json`、ソースコード、リポジトリに書かないでください。
 
 ### ローカル開発環境へ送信する
 
