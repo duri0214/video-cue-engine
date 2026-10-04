@@ -74,9 +74,24 @@ $env:VIDEO_CUE_UPLOAD_TOKEN = Read-Host 'Django と engine に共通のトーク
 
 `Read-Host` で入力した値は、その PowerShell セッションの環境変数としてだけ有効で、そこから起動した子プロセスに引き継がれます。PowerShell を開き直したら、engine 側で再設定してください。
 
-### CLI から送信する
+### GUI から送信する
 
-ローカル開発環境または本番環境の設定を済ませた engine 側 PowerShell から起動します。CLI で新しく解析して送る場合は `--upload` を付けます。次のコマンドは同梱素材を解析し、毎回新しい一時フォルダにローカル成果物を保存してから送信します。送信済みの成果物を再解析せずに送る場合は、結果フォルダを指定して `--upload-existing` を実行します。
+GUI で解析・送信する場合、CLI の `--input`、`--output`、`--upload` は入力しません。環境変数を設定した同じ PowerShell から、ビルド済みの GUI を起動します。
+
+```powershell
+$guiExe = (Resolve-Path .\target\release\video-cue-engine-gui.exe).Path
+& $guiExe
+```
+
+PowerShell の環境変数は、エクスプローラーから起動した GUI には渡りません。GUI で入力フォルダと出力先を選び、「処理完了後に Django へ転送」をオンにしてから「一括解析を開始」を押します。このチェックは初期状態でオフです。オンにした回だけ、解析に成功した各動画の `analysis.json` と、イベントがある場合の `highlights.mp4` を送ります。イベント0件では JSON だけを送ります。元 MP4 と `events/` の個別クリップは送信しません。
+
+`VIDEO_CUE_UPLOAD_URL` または `VIDEO_CUE_UPLOAD_TOKEN` が未設定のまま送信を開始すると、それぞれ「VIDEO_CUE_UPLOAD_URL を設定してください。」「VIDEO_CUE_UPLOAD_TOKEN を設定してください。」と表示されます。設定後に同じ PowerShell から再実行してください。GUI では送信設定が不足していると解析開始前にエラーを表示します。
+
+送信成功時は動画 ID と、新規登録か再送確認かを表示します。送信が失敗してもローカル成果物は残ります。GUI では動画ごとに送信結果と理由が表示され、失敗した行の「ローカル成果物から再送」で再解析せずに送れます。容量超過などで送信できない場合も、理由が表示されます。
+
+### CLI から送信する（任意）
+
+GUI を使わずに送信する場合は、ローカル開発環境または本番環境の設定を済ませた engine 側 PowerShell から実行します。新しく解析して送る場合は `--upload`、保存済み成果物を再送する場合は `--upload-existing` を使います。
 
 ```powershell
 $videoCueOutput = Join-Path $env:TEMP ('video-cue-upload-' + [guid]::NewGuid().ToString('N'))
@@ -85,22 +100,7 @@ cargo run --release -- --input .\fixtures\scene-motion.mp4 --output $videoCueOut
 cargo run --release -- --upload-existing (Join-Path $videoCueOutput 'video-cue-engine-output')
 ```
 
-`--input` / `--output` だけの CLI 実行は送信しません。
-
-### GUI から送信する
-
-GUI で解析・送信する場合、CLI の `--input`、`--output`、`--upload` は入力しません。環境変数を設定した **同じ PowerShell** から、ビルド済みの GUI を起動します。ビルド済みなら次の 2 行だけで起動できます。
-
-```powershell
-$guiExe = (Resolve-Path .\target\release\video-cue-engine-gui.exe).Path
-& $guiExe
-```
-
-エクスプローラーから実行ファイルをダブルクリックすると、PowerShell で設定した環境変数は引き継がれません。GUI で入力フォルダと出力先を選び、「処理完了後に Django へ転送」をオンにしてから「一括解析を開始」を押します。このチェックは初期状態でオフです。オンにした回だけ、解析に成功した各動画の `analysis.json` と、イベントがある場合の `highlights.mp4` を送ります。イベント0件では JSON だけを送ります。元 MP4 と `events/` の個別クリップは送信しません。
-
-`VIDEO_CUE_UPLOAD_URL` または `VIDEO_CUE_UPLOAD_TOKEN` が未設定のまま送信を開始すると、それぞれ「VIDEO_CUE_UPLOAD_URL を設定してください。」「VIDEO_CUE_UPLOAD_TOKEN を設定してください。」と表示されます。設定後に同じ PowerShell から再実行してください。GUI では送信設定が不足していると解析開始前にエラーを表示します。
-
-送信成功時は動画 ID と、新規登録か再送確認かを表示します。送信が失敗してもローカル成果物は残ります。GUI では動画ごとに送信結果と理由が表示され、失敗した行の「ローカル成果物から再送」で再解析せずに送れます。GUI を閉じた後や CLI で失敗した後は、上の `--upload-existing` で結果フォルダから再送できます。容量超過などで送信できない場合も、理由が表示されます。
+`--input` / `--output` だけの CLI 実行は送信しません。`--upload` が失敗しても成果物は残るため、`--upload-existing` で再送できます。
 
 ## CLI から単一 MP4 を解析
 
