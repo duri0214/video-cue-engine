@@ -117,18 +117,6 @@ cargo run --release -- --input /path/to/recording.mp4 --output /path/to/result-f
 
 カメラの揺れや照明の変化も動きとして検出されるため、実録画では `--threshold` を素材に合わせて調整してください。
 
-出力例:
-
-```text
-result/
-└── video-cue-engine-output/
-    ├── analysis.json
-    ├── highlights.mp4
-    └── events/
-        ├── event-001.mp4
-        └── event-002.mp4
-```
-
 ## テスト素材と検証
 
 [`fixtures/`](fixtures/README.md) に短い定点カメラ風 MP4、正解時刻、再生成スクリプトがあります。再生成には Python 3 と FFmpeg を使います。
