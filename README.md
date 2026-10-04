@@ -56,14 +56,7 @@ Write-Output $guiExe
 
 ### ローカル開発環境へ送信する
 
-これは Django の開発サーバーへ送信する場合の手順です。`portfolio` のリポジトリ直下で PowerShell を開き、Django を起動する前にトークンを設定します。
-
-```powershell
-$env:VIDEO_CUE_UPLOAD_TOKEN = Read-Host 'Django と engine に共通のトークン'
-.\.venv\Scripts\python.exe manage.py runserver 127.0.0.1:8000
-```
-
-engine 側は別の PowerShell を `video-cue-engine` のリポジトリ直下で開き、同じトークンとローカル用 URL を設定します。
+これは、Django 側でローカル開発サーバーを起動した状態で送信する場合の手順です。engine 側は別の PowerShell を `video-cue-engine` のリポジトリ直下で開き、同じトークンとローカル用 URL を設定します。
 
 ```powershell
 $env:VIDEO_CUE_UPLOAD_URL = 'http://127.0.0.1:8000/video_cue/api/results/'
