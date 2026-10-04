@@ -21,6 +21,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 tempfile = "3"
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "multipart", "rustls"] }
+sha2 = "0.10"
 eframe = { version = "0.31", optional = true, default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
 rfd = { version = "0.15", optional = true }
 

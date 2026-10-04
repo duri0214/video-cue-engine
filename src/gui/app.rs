@@ -8,7 +8,8 @@ use std::{
 
 use eframe::egui::{self, RichText};
 use video_cue_engine::{
-    BatchError, BatchEvent, BatchPlan, BatchSummary, downloads_directory, open_directory, run_batch,
+    BatchError, BatchEvent, BatchPlan, BatchSummary, UploadConfig, UploadError, UploadReceipt,
+    downloads_directory, open_directory, run_batch_with_upload, upload_result,
 };
 
 use super::theme;
@@ -22,6 +23,10 @@ enum Message {
     Progress(BatchEvent),
     Completed(Result<BatchSummary, BatchError>),
     Opened(Result<(), std::io::Error>),
+    RetryFinished {
+        index: usize,
+        result: Result<UploadReceipt, UploadError>,
+    },
 }
 
 enum VideoStatus {
@@ -29,6 +34,9 @@ enum VideoStatus {
     Running,
     Succeeded,
     Failed(String),
+    Uploading,
+    Uploaded(UploadReceipt),
+    UploadFailed(String),
 }
 
 struct VideoRow {
@@ -48,6 +56,9 @@ pub struct BatchApp {
     result_directory: Option<PathBuf>,
     succeeded: usize,
     failed: usize,
+    upload_after_analysis: bool,
+    uploaded: usize,
+    upload_failed: usize,
 }
 
 impl BatchApp {
@@ -72,6 +83,9 @@ impl BatchApp {
             result_directory: None,
             succeeded: 0,
             failed: 0,
+            upload_after_analysis: false,
+            uploaded: 0,
+            upload_failed: 0,
         }
     }
 
@@ -134,21 +148,58 @@ impl BatchApp {
         };
         let plan = Arc::clone(plan);
         let output = output.clone();
+        let upload = if self.upload_after_analysis {
+            match UploadConfig::from_env() {
+                Ok(config) => Some(config),
+                Err(error) => {
+                    self.error = Some(error.to_string());
+                    return;
+                }
+            }
+        } else {
+            None
+        };
         self.error = None;
         self.result_directory = None;
         self.succeeded = 0;
         self.failed = 0;
+        self.uploaded = 0;
+        self.upload_failed = 0;
         for row in &mut self.rows {
             row.status = VideoStatus::Waiting;
             row.output = None;
         }
         self.status = "出力先と FFmpeg を確認中…".into();
         self.spawn(ctx, move |sender, context| {
-            let result = run_batch(&plan, &output, |event| {
+            let result = run_batch_with_upload(&plan, &output, upload.as_ref(), |event| {
                 send(&sender, &context, Message::Progress(event));
             });
             send(&sender, &context, Message::Completed(result));
         });
+    }
+
+    fn retry_upload(&mut self, ctx: &egui::Context, index: usize) {
+        let Some(directory) = self.rows[index].output.clone() else {
+            return;
+        };
+        let config = match UploadConfig::from_env() {
+            Ok(config) => config,
+            Err(error) => {
+                self.rows[index].status = VideoStatus::UploadFailed(error.to_string());
+                return;
+            }
+        };
+        self.rows[index].status = VideoStatus::Uploading;
+        self.error = None;
+        self.status = format!("再送中: {}", file_name(&self.rows[index].input));
+        self.spawn(ctx, move |sender, context| {
+            let result = upload_result(&config, &directory);
+            send(&sender, &context, Message::RetryFinished { index, result });
+        });
+        if self.receiver.is_none() {
+            self.rows[index].status =
+                VideoStatus::UploadFailed("再送の作業スレッドを起動できませんでした。".into());
+        }
     }
 
     fn poll(&mut self) {
@@ -177,6 +228,20 @@ impl BatchApp {
                             ));
                         }
                     },
+                    BatchEvent::UploadStarted { index } => {
+                        self.status = format!("送信中: {}", file_name(&self.rows[index].input));
+                        self.rows[index].status = VideoStatus::Uploading;
+                    }
+                    BatchEvent::UploadFinished { index, result } => match result {
+                        Ok(receipt) => {
+                            self.uploaded += 1;
+                            self.rows[index].status = VideoStatus::Uploaded(receipt);
+                        }
+                        Err(error) => {
+                            self.upload_failed += 1;
+                            self.rows[index].status = VideoStatus::UploadFailed(error.to_string());
+                        }
+                    },
                 },
                 Ok(message) => {
                     self.receiver = None;
@@ -189,6 +254,8 @@ impl BatchApp {
                                 self.result_directory = None;
                                 self.succeeded = 0;
                                 self.failed = 0;
+                                self.uploaded = 0;
+                                self.upload_failed = 0;
                                 self.error = None;
                                 match result {
                                     Ok(plan) => {
@@ -222,6 +289,8 @@ impl BatchApp {
                             Ok(summary) => {
                                 self.succeeded = summary.succeeded;
                                 self.failed = summary.failed;
+                                self.uploaded = summary.uploaded;
+                                self.upload_failed = summary.upload_failed;
                                 self.result_directory = Some(summary.output);
                                 self.status = "すべての動画の処理が終了しました".into();
                             }
@@ -235,6 +304,19 @@ impl BatchApp {
                                 self.error = Some(format!("出力フォルダを開けません: {error}"));
                             }
                         }
+                        Message::RetryFinished { index, result } => match result {
+                            Ok(receipt) => {
+                                self.upload_failed -= 1;
+                                self.uploaded += 1;
+                                self.rows[index].status = VideoStatus::Uploaded(receipt);
+                                self.status = "再送が完了しました".into();
+                            }
+                            Err(error) => {
+                                self.rows[index].status =
+                                    VideoStatus::UploadFailed(error.to_string());
+                                self.status = "再送に失敗しました".into();
+                            }
+                        },
                         Message::Progress(_) => unreachable!(),
                     }
                 }
@@ -243,6 +325,14 @@ impl BatchApp {
                     self.receiver = None;
                     self.status = "処理が中断されました".into();
                     self.error = Some("作業スレッドが予期せず終了しました。出力先を確認してから再実行してください。".into());
+                    for row in &mut self.rows {
+                        if matches!(row.status, VideoStatus::Uploading) {
+                            row.status = VideoStatus::UploadFailed(
+                                "送信が中断されました。ローカル成果物から再送できます。".into(),
+                            );
+                            self.upload_failed += 1;
+                        }
+                    }
                 }
             }
         }
@@ -253,6 +343,7 @@ impl eframe::App for BatchApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll();
         let busy = self.receiver.is_some();
+        let mut retry_index = None;
         if busy && ctx.input(|input| input.viewport().close_requested()) {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.error = Some("処理中です。完了してからウィンドウを閉じてください。".into());
@@ -322,6 +413,19 @@ impl eframe::App for BatchApp {
                         );
                     });
                     ui.add_space(4.0);
+                    theme::panel().show(ui, |ui| {
+                        ui.set_min_width(ui.available_width());
+                        ui.label(RichText::new("03  Django へ送信").strong());
+                        ui.add_enabled(
+                            !busy,
+                            egui::Checkbox::new(
+                                &mut self.upload_after_analysis,
+                                "処理完了後に Django へ転送",
+                            ),
+                        );
+                        ui.small("送信先とトークンは VIDEO_CUE_UPLOAD_URL / VIDEO_CUE_UPLOAD_TOKEN で設定します。ローカル成果物は保存されます。");
+                    });
+                    ui.add_space(4.0);
                     ui.horizontal(|ui| {
                         let button = egui::Button::new(
                             RichText::new("一括解析を開始")
@@ -362,6 +466,20 @@ impl eframe::App for BatchApp {
                         ));
                         ui.label(format!("/ 全 {} 件", self.rows.len()));
                     });
+                    if self.upload_after_analysis || self.uploaded + self.upload_failed > 0 {
+                        ui.horizontal(|ui| {
+                            ui.label(format!("送信成功 {}", self.uploaded));
+                            ui.label(
+                                RichText::new(format!("送信失敗 {}", self.upload_failed)).color(
+                                    if self.upload_failed > 0 {
+                                        theme::RED
+                                    } else {
+                                        theme::MUTED
+                                    },
+                                ),
+                            );
+                        });
+                    }
                     ui.add(
                         egui::ProgressBar::new(if self.rows.is_empty() {
                             0.0
@@ -395,12 +513,33 @@ impl eframe::App for BatchApp {
                                     VideoStatus::Running => ("解析中", theme::ACCENT),
                                     VideoStatus::Succeeded => ("完了", theme::ACCENT),
                                     VideoStatus::Failed(_) => ("失敗", theme::RED),
+                                    VideoStatus::Uploading => ("送信中", theme::ACCENT),
+                                    VideoStatus::Uploaded(receipt) => {
+                                        if receipt.created {
+                                            ("送信済み", theme::ACCENT)
+                                        } else {
+                                            ("再送確認済み", theme::ACCENT)
+                                        }
+                                    }
+                                    VideoStatus::UploadFailed(_) => ("送信失敗", theme::RED),
                                 };
                                 ui.colored_label(color, label);
                                 ui.label(format!("{:04}  {}", index + 1, file_name(&row.input)));
                             });
                             if let VideoStatus::Failed(error) = &row.status {
                                 ui.colored_label(theme::RED, error);
+                            }
+                            if let VideoStatus::UploadFailed(error) = &row.status {
+                                ui.colored_label(theme::RED, error);
+                                if ui
+                                    .add_enabled(!busy, egui::Button::new("ローカル成果物から再送"))
+                                    .clicked()
+                                {
+                                    retry_index = Some(index);
+                                }
+                            }
+                            if let VideoStatus::Uploaded(receipt) = &row.status {
+                                ui.small(format!("動画 ID: {}", receipt.key));
                             }
                             if let Some(output) = &row.output {
                                 ui.small(format!("保存先: {}", output.display()));
@@ -410,6 +549,9 @@ impl eframe::App for BatchApp {
                     }
                 });
             });
+        if let Some(index) = retry_index {
+            self.retry_upload(ctx, index);
+        }
     }
 }
 

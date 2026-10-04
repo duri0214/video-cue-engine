@@ -3,3 +3,4 @@ pub mod desktop;
 pub mod ffmpeg;
 pub mod folders;
 pub mod process;
+pub mod upload;
