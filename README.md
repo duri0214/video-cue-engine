@@ -48,44 +48,57 @@ Write-Output $guiExe
 
 ### Django ビューアへの任意送信
 
-1. **Django 側を設定する。** 送信先の `portfolio` に [`docs/video-cue-viewer.md`](https://github.com/duri0214/portfolio/blob/master/docs/video-cue-viewer.md) の受信 API を用意し、Django プロセスが読む `VIDEO_CUE_UPLOAD_TOKEN` を設定します。本番では `portfolio` の `.env` など、Django の起動設定で管理してください。ローカルで試す場合は、`portfolio` のリポジトリ直下で PowerShell を開き、次のように Django の起動前に設定できます。
+送信先の `portfolio` に [`docs/video-cue-viewer.md`](https://github.com/duri0214/portfolio/blob/master/docs/video-cue-viewer.md) の受信 API を用意し、Django 側と engine 側に同じ `VIDEO_CUE_UPLOAD_TOKEN` を設定します。トークンを URL、`analysis.json`、ソースコード、リポジトリに書かないでください。
 
-   ```powershell
-   $env:VIDEO_CUE_UPLOAD_TOKEN = Read-Host 'Django と engine に共通のトークン'
-   .\.venv\Scripts\python.exe manage.py runserver 127.0.0.1:8000
-   ```
+#### ローカル開発環境で試す
 
-2. **engine 側を設定する。** 別の PowerShell を `video-cue-engine` のリポジトリ直下で開き、Django 側と**同じトークン**を入力します。ローカル Django への送信先は次のとおりです。
+これは Django の開発サーバーを使って動作確認する場合の手順です。`portfolio` のリポジトリ直下で PowerShell を開き、Django を起動する前にトークンを設定します。
 
-   ```powershell
-   $env:VIDEO_CUE_UPLOAD_URL = 'http://127.0.0.1:8000/video_cue/api/results/'
-   $env:VIDEO_CUE_UPLOAD_TOKEN = Read-Host 'Django と engine に共通のトークン'
-   ```
+```powershell
+$env:VIDEO_CUE_UPLOAD_TOKEN = Read-Host 'Django と engine に共通のトークン'
+.\.venv\Scripts\python.exe manage.py runserver 127.0.0.1:8000
+```
 
-   本番 Django に送る場合は、上の URL 設定行を実際のホスト名に置き換えます。URL は **HTTPS** を使い、`/video_cue/api/results/` で終えてください。HTTP を使用できるのは localhost またはループバックアドレスへの送信だけです。
+engine 側は別の PowerShell を `video-cue-engine` のリポジトリ直下で開き、同じトークンとローカル用 URL を設定します。
 
-   ```powershell
-   $env:VIDEO_CUE_UPLOAD_URL = 'https://example.com/video_cue/api/results/'
-   ```
+```powershell
+$env:VIDEO_CUE_UPLOAD_URL = 'http://127.0.0.1:8000/video_cue/api/results/'
+$env:VIDEO_CUE_UPLOAD_TOKEN = Read-Host 'Django と engine に共通のトークン'
+```
 
-   `Read-Host` で入力した値は、その PowerShell セッションの環境変数としてだけ有効で、そこから起動した子プロセスに引き継がれます。Django 側と engine 側の PowerShell を開き直したら、各々で再設定してください。トークンを URL、`analysis.json`、ソースコード、リポジトリに書かないでください。
+#### 本番環境へ送信する
 
-3. **同じ engine 側 PowerShell から CLI または GUI を起動する。** CLI で新しく解析して送る場合は `--upload` を付けます。次のコマンドは同梱素材を解析し、毎回新しい一時フォルダにローカル成果物を保存してから送信します。送信済みの成果物を再解析せずに送る場合は、結果フォルダを指定して `--upload-existing` を実行します。
+本番では Django の `.env`、サービス設定、シークレット管理など、Django を起動する仕組みで `VIDEO_CUE_UPLOAD_TOKEN` を設定します。`runserver` は本番起動方法として使用しません。
 
-   ```powershell
-   $videoCueOutput = Join-Path $env:TEMP ('video-cue-upload-' + [guid]::NewGuid().ToString('N'))
-   New-Item -ItemType Directory -Path $videoCueOutput | Out-Null
-   cargo run --release -- --input .\fixtures\scene-motion.mp4 --output $videoCueOutput --upload
-   cargo run --release -- --upload-existing (Join-Path $videoCueOutput 'video-cue-engine-output')
-   ```
+engine 側では、Django と同じトークンを設定し、実際のホスト名を使った HTTPS の URL を指定します。URL は `/video_cue/api/results/` で終えてください。
 
-   `--input` / `--output` だけの CLI 実行は送信しません。GUI を使う場合も、環境変数を設定した **同じ PowerShell** から起動してください。エクスプローラーから実行ファイルをダブルクリックした場合、PowerShell で設定した環境変数は引き継がれません。
+本番の送信先に HTTP は使わないでください。HTTP を使用できるのは localhost またはループバックアドレスへのローカル開発時だけです。
 
-   ```powershell
-   cargo run --release --features gui --bin video-cue-engine-gui
-   ```
+```powershell
+$env:VIDEO_CUE_UPLOAD_URL = 'https://example.com/video_cue/api/results/'
+$env:VIDEO_CUE_UPLOAD_TOKEN = Read-Host 'Django と engine に共通のトークン'
+```
 
-   GUI で入力フォルダと出力先を選び、「処理完了後に Django へ転送」をオンにしてから「一括解析を開始」を押します。このチェックは初期状態でオフです。オンにした回だけ、解析に成功した各動画の `analysis.json` と、イベントがある場合の `highlights.mp4` を送ります。イベント0件では JSON だけを送ります。元 MP4 と `events/` の個別クリップは送信しません。
+`Read-Host` で入力した値は、その PowerShell セッションの環境変数としてだけ有効で、そこから起動した子プロセスに引き継がれます。PowerShell を開き直したら、engine 側で再設定してください。
+
+#### CLI または GUI から送信する
+
+上のどちらかの環境設定を済ませた、同じ engine 側 PowerShell から起動します。CLI で新しく解析して送る場合は `--upload` を付けます。次のコマンドは同梱素材を解析し、毎回新しい一時フォルダにローカル成果物を保存してから送信します。送信済みの成果物を再解析せずに送る場合は、結果フォルダを指定して `--upload-existing` を実行します。
+
+```powershell
+$videoCueOutput = Join-Path $env:TEMP ('video-cue-upload-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $videoCueOutput | Out-Null
+cargo run --release -- --input .\fixtures\scene-motion.mp4 --output $videoCueOutput --upload
+cargo run --release -- --upload-existing (Join-Path $videoCueOutput 'video-cue-engine-output')
+```
+
+`--input` / `--output` だけの CLI 実行は送信しません。GUI を使う場合も、環境変数を設定した **同じ PowerShell** から起動してください。エクスプローラーから実行ファイルをダブルクリックした場合、PowerShell で設定した環境変数は引き継がれません。
+
+```powershell
+cargo run --release --features gui --bin video-cue-engine-gui
+```
+
+GUI で入力フォルダと出力先を選び、「処理完了後に Django へ転送」をオンにしてから「一括解析を開始」を押します。このチェックは初期状態でオフです。オンにした回だけ、解析に成功した各動画の `analysis.json` と、イベントがある場合の `highlights.mp4` を送ります。イベント0件では JSON だけを送ります。元 MP4 と `events/` の個別クリップは送信しません。
 
 `VIDEO_CUE_UPLOAD_URL` または `VIDEO_CUE_UPLOAD_TOKEN` が未設定のまま送信を開始すると、それぞれ「VIDEO_CUE_UPLOAD_URL を設定してください。」「VIDEO_CUE_UPLOAD_TOKEN を設定してください。」と表示されます。設定後に同じ PowerShell から再実行してください。GUI では送信設定が不足していると解析開始前にエラーを表示します。
 
