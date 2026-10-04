@@ -81,9 +81,9 @@ $env:VIDEO_CUE_UPLOAD_TOKEN = Read-Host 'Django と engine に共通のトーク
 
 `Read-Host` で入力した値は、その PowerShell セッションの環境変数としてだけ有効で、そこから起動した子プロセスに引き継がれます。PowerShell を開き直したら、engine 側で再設定してください。
 
-#### CLI または GUI から送信する
+#### CLI から送信する
 
-上のどちらかの環境設定を済ませた、同じ engine 側 PowerShell から起動します。CLI で新しく解析して送る場合は `--upload` を付けます。次のコマンドは同梱素材を解析し、毎回新しい一時フォルダにローカル成果物を保存してから送信します。送信済みの成果物を再解析せずに送る場合は、結果フォルダを指定して `--upload-existing` を実行します。
+上のどちらかの環境設定を済ませた engine 側 PowerShell から起動します。CLI で新しく解析して送る場合は `--upload` を付けます。次のコマンドは同梱素材を解析し、毎回新しい一時フォルダにローカル成果物を保存してから送信します。送信済みの成果物を再解析せずに送る場合は、結果フォルダを指定して `--upload-existing` を実行します。
 
 ```powershell
 $videoCueOutput = Join-Path $env:TEMP ('video-cue-upload-' + [guid]::NewGuid().ToString('N'))
@@ -92,13 +92,18 @@ cargo run --release -- --input .\fixtures\scene-motion.mp4 --output $videoCueOut
 cargo run --release -- --upload-existing (Join-Path $videoCueOutput 'video-cue-engine-output')
 ```
 
-`--input` / `--output` だけの CLI 実行は送信しません。GUI を使う場合も、環境変数を設定した **同じ PowerShell** から起動してください。エクスプローラーから実行ファイルをダブルクリックした場合、PowerShell で設定した環境変数は引き継がれません。
+`--input` / `--output` だけの CLI 実行は送信しません。
+
+#### GUI から送信する
+
+GUI で解析・送信する場合、CLI の `--input`、`--output`、`--upload` は入力しません。環境変数を設定した **同じ PowerShell** から、ビルド済みの GUI を起動します。ビルド済みなら次の 2 行だけで起動できます。
 
 ```powershell
-cargo run --release --features gui --bin video-cue-engine-gui
+$guiExe = (Resolve-Path .\target\release\video-cue-engine-gui.exe).Path
+& $guiExe
 ```
 
-GUI で入力フォルダと出力先を選び、「処理完了後に Django へ転送」をオンにしてから「一括解析を開始」を押します。このチェックは初期状態でオフです。オンにした回だけ、解析に成功した各動画の `analysis.json` と、イベントがある場合の `highlights.mp4` を送ります。イベント0件では JSON だけを送ります。元 MP4 と `events/` の個別クリップは送信しません。
+エクスプローラーから実行ファイルをダブルクリックすると、PowerShell で設定した環境変数は引き継がれません。GUI で入力フォルダと出力先を選び、「処理完了後に Django へ転送」をオンにしてから「一括解析を開始」を押します。このチェックは初期状態でオフです。オンにした回だけ、解析に成功した各動画の `analysis.json` と、イベントがある場合の `highlights.mp4` を送ります。イベント0件では JSON だけを送ります。元 MP4 と `events/` の個別クリップは送信しません。
 
 `VIDEO_CUE_UPLOAD_URL` または `VIDEO_CUE_UPLOAD_TOKEN` が未設定のまま送信を開始すると、それぞれ「VIDEO_CUE_UPLOAD_URL を設定してください。」「VIDEO_CUE_UPLOAD_TOKEN を設定してください。」と表示されます。設定後に同じ PowerShell から再実行してください。GUI では送信設定が不足していると解析開始前にエラーを表示します。
 
