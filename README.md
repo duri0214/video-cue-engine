@@ -115,31 +115,9 @@ cargo run --release -- --upload-existing (Join-Path $videoCueOutput 'video-cue-e
 
 `--input` / `--output` だけの CLI 実行は送信しません。`--upload` が失敗しても成果物は残るため、`--upload-existing` で再送できます。
 
-## テスト素材と検証
+## テスト素材
 
 [`fixtures/`](fixtures/README.md) に短い定点カメラ風 MP4、正解時刻、再生成スクリプトがあります。再生成には Python 3 と FFmpeg を使います。
-
-```sh
-python fixtures/generate.py
-cargo fmt --all -- --check
-cargo test --all-targets
-cargo clippy --all-targets --all-features -- -D warnings
-```
-
-GUI を含むテストは `cargo test --all-targets --all-features` で実行できます。
-
-Windows で画面を確認する場合は、リポジトリ直下の PowerShell で次を実行します。
-
-```powershell
-cargo build --features gui --bin video-cue-engine-gui
-$batchCheckOutput = Join-Path $env:TEMP ('video-cue-ui-' + [guid]::NewGuid().ToString('N'))
-New-Item -ItemType Directory -Path $batchCheckOutput
-(Resolve-Path .\fixtures).Path
-$batchCheckOutput
-.\target\debug\video-cue-engine-gui.exe
-```
-
-表示した `fixtures` の絶対パスを入力フォルダに、新規作成した一時フォルダを出力先に選びます。対象 2 件、完了 2 件・失敗 0 件となり、`scene-motion.mp4` の結果にはハイライトとイベント動画、`scene-still.mp4` の結果には空イベントの JSON があることを確認してください。
 
 ## 開発ルールとスキル
 
@@ -152,5 +130,3 @@ $batchCheckOutput
 | [cleanup-branch](.codex/skills/cleanup-branch/SKILL.md) | マージ後のローカルブランチ整理 |
 
 Issue 番号付きブランチで作業し、変更の検証後にコミット・push・PR 作成へ進む。詳細は `AGENTS.md` の常用フローに従う。
-
-Rust コード・依存関係の変更では、`AGENTS.md` に記載した `cargo fmt`・`cargo test`・`cargo clippy` を実行する。
