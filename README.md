@@ -52,9 +52,9 @@ Write-Output $guiExe
 
 送信先の `portfolio` に [`docs/video-cue-viewer.md`](https://github.com/duri0214/portfolio/blob/master/docs/video-cue-viewer.md) の受信 API を用意し、Django 側と engine 側に同じ `VIDEO_CUE_UPLOAD_TOKEN` を設定します。トークンを URL、`analysis.json`、ソースコード、リポジトリに書かないでください。
 
-### ローカル開発環境で試す
+### ローカル開発環境へ送信する
 
-これは Django の開発サーバーを使って動作確認する場合の手順です。`portfolio` のリポジトリ直下で PowerShell を開き、Django を起動する前にトークンを設定します。
+これは Django の開発サーバーへ送信する場合の手順です。`portfolio` のリポジトリ直下で PowerShell を開き、Django を起動する前にトークンを設定します。
 
 ```powershell
 $env:VIDEO_CUE_UPLOAD_TOKEN = Read-Host 'Django と engine に共通のトークン'
