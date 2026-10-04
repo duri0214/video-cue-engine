@@ -15,7 +15,15 @@
 cargo build --release --features gui --bin video-cue-engine-gui
 ```
 
-ローカル解析だけなら、`target\release\video-cue-engine-gui.exe` をダブルクリックして起動できます。Django に転送する場合は、下の [Django ビューアへの任意送信](#django-ビューアへの任意送信) に従い、環境変数を設定した PowerShell から GUI を起動してください。ビルド済みの実行ファイルでローカル解析する場合、Rust、Django、ブラウザは不要です。FFmpeg / ffprobe は利用者の PC にインストールし、`PATH` に追加してください。
+ビルドが成功すると、リポジトリ直下の `target\release\video-cue-engine-gui.exe` に実行ファイルが作られます。PowerShell で生成先を確認して起動する場合は次を実行します。
+
+```powershell
+$guiExe = (Resolve-Path .\target\release\video-cue-engine-gui.exe).Path
+Write-Output $guiExe
+& $guiExe
+```
+
+ローカル解析だけなら、エクスプローラーでこの `.exe` をダブルクリックしても起動できます。Django に転送する場合は、下の [Django ビューアへの任意送信](#django-ビューアへの任意送信) に従い、環境変数を設定した PowerShell から GUI を起動してください。ビルド済みの実行ファイルでローカル解析する場合、Rust、Django、ブラウザは不要です。FFmpeg / ffprobe は利用者の PC にインストールし、`PATH` に追加してください。
 
 1. 「入力フォルダを選ぶ」で録画フォルダを選びます。直下にある `.mp4` / `.MP4` の通常ファイルだけを、ファイル名順に一覧表示します。サブフォルダとシンボリックリンクは対象外です。
 2. 対象件数と一覧を確認します。ファイルを追加・削除した場合は「再読み込み」で一覧を更新します。
