@@ -84,19 +84,6 @@ GUI で入力フォルダと出力先を選び、「処理完了後に Django �
 
 送信成功時は動画 ID と、新規登録か再送確認かを表示します。送信が失敗してもローカル成果物は残ります。GUI では動画ごとに送信結果と理由が表示され、失敗した行の「ローカル成果物から再送」で再解析せずに送れます。容量超過などで送信できない場合も、理由が表示されます。
 
-### CLI から送信する（任意）
-
-GUI を使わずに送信する場合は、ローカル開発環境または本番環境の設定を済ませた engine 側 PowerShell から実行します。新しく解析して送る場合は `--upload`、保存済み成果物を再送する場合は `--upload-existing` を使います。
-
-```powershell
-$videoCueOutput = Join-Path $env:TEMP ('video-cue-upload-' + [guid]::NewGuid().ToString('N'))
-New-Item -ItemType Directory -Path $videoCueOutput | Out-Null
-cargo run --release -- --input .\fixtures\scene-motion.mp4 --output $videoCueOutput --upload
-cargo run --release -- --upload-existing (Join-Path $videoCueOutput 'video-cue-engine-output')
-```
-
-`--input` / `--output` だけの CLI 実行は送信しません。`--upload` が失敗しても成果物は残るため、`--upload-existing` で再送できます。
-
 ## CLI の実行例（単一 MP4、任意）
 
 GUI を使わずに単一の MP4 を解析する場合の実行例です。
@@ -116,6 +103,17 @@ cargo run --release -- --input /path/to/recording.mp4 --output /path/to/result-f
 | `--merge-gap` | `0.6` | 動きの間に挟まる静止区間を結合する最大秒数 |
 
 カメラの揺れや照明の変化も動きとして検出されるため、実録画では `--threshold` を素材に合わせて調整してください。
+
+Django に送信する場合は、[Django ビューアへの送信設定](#django-ビューアへの送信設定)を済ませてから `--upload` を付けます。保存済みの成果物を再送する場合は `--upload-existing` を使います。
+
+```powershell
+$videoCueOutput = Join-Path $env:TEMP ('video-cue-upload-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $videoCueOutput | Out-Null
+cargo run --release -- --input .\fixtures\scene-motion.mp4 --output $videoCueOutput --upload
+cargo run --release -- --upload-existing (Join-Path $videoCueOutput 'video-cue-engine-output')
+```
+
+`--input` / `--output` だけの CLI 実行は送信しません。`--upload` が失敗しても成果物は残るため、`--upload-existing` で再送できます。
 
 ## テスト素材と検証
 
