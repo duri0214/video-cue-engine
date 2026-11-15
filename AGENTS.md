@@ -11,6 +11,7 @@
 - GitHub の Issue、Project、PR、レビューコメントの操作には `gh` CLI を使う。
 - ルールやスキル自体を変更するときも、通常の Issue、ブランチ、確認、コミット、PR の流れに従う。
 - 新規またはまっさらなスレッドにこのリポジトリの GitHub Issue URL が貼られた場合は、その Issue を対応対象として扱い、追加確認なしで内容確認、ブランチ作成、Project の `In progress` 更新、作業着手まで進める。
+- 1つのスレッドでは対象 Issue 1件だけを実装する。別 Issue に属する作業は同じスレッドで実装せず、起票または既存 Issue への追記までに留め、実装は別スレッドで行う。
 - コード、ルール、ドキュメントを変更する依頼では、確認後に commit、push、PR作成または更新まで進める。ユーザーが `commit不要`、`push不要`、`PR不要`、`まだコミットしない` と明示した場合だけ停止する。
 - 説明、調査、レビュー結果の報告、状態確認だけを求められた場合は、変更や commit、push、PR作成を行わない。
 
@@ -19,6 +20,7 @@
 - 常に適用する設計・運用方針: `.codex/rules/principles.md`、`.codex/rules/project.md`、`.codex/rules/ddd.md`
 - Rust のコード: `.codex/rules/rust.md`
 - Rust のテスト: `.codex/rules/testing.md`
+- GUI のコード: `.codex/rules/ui.md`
 
 ## スキルの使い分け
 
@@ -59,12 +61,13 @@
 ### PR 作成
 
 1. `main` / `master` 上ではPRを作成しない。baseブランチは `gh repo view --json defaultBranchRef --jq .defaultBranchRef.name` で確認する。
-2. ブランチ名の先頭の数字を Issue 番号として扱い、Issue のタイトル、本文、ラベル、assignee、Project を確認する。
+2. ブランチ名の先頭の数字を Issue 番号として扱い、Issue のタイトル、本文、ラベル、assignee、Project を確認する。PR の assignee、ラベル、Project は対応 Issue の情報を反映する。PR に既に設定がある場合は削除・置換せず、不足分だけ追加する。Issue に情報がない場合や既存設定と食い違う場合は値を推測・上書きせず、その内容を報告する。
 3. `git diff --stat origin/<base>..HEAD`、`git diff --name-status origin/<base>..HEAD` でPRの差分を確認する。
 4. PR本文は日本語で、概要、主な変更点、オペマニ（目検手順）、自動テストの範囲、`Closes #<Issue番号>` を含める。
 5. オペマニには実行場所・前提、コピーして実行できる具体的なコマンド、生成物と期待値、目視で見る点を順に書く。特定の入力で確認する場合は実在するファイルのパスを使い、`recording.mp4` や `<新しい出力先>` のような置換前提の例だけで済ませない。空の出力先が必要なら、未使用のパスを指定できるコマンドにする。
 6. 目検項目は操作と期待値を `- [ ]` 形式で書き、実際にその手順で確認した項目だけを `[x]` にする。実行していない確認を完了扱いにしない。
    - 同じ前提・入力・処理を複数項目で繰り返さず、1回の操作結果を後続の確認で再利用する。別の初期状態や入力経路の確認に必要な再実行だけを残し、各項目の合否条件と受け入れ条件を重複なく網羅する。
-7. `gh pr create --base <base> --head <current-branch> --title "#<Issue番号> <Issueタイトル>" --body-file <body-file>` で作成し、作成後に URL、assignee、ラベル、Project を確認する。変更依頼に対しては、明示的な `PR不要` 指定がない限り作成または更新まで進める。
+7. `gh pr create --base <base> --head <current-branch> --title "#<Issue番号> <Issueタイトル>" --body-file <body-file>` で作成する。変更依頼に対しては、明示的な `PR不要` 指定がない限り作成または更新まで進める。
+8. 作成後に URL、assignee、ラベル、Project を確認し、対応 Issue から不足している設定を `gh` CLI で追加する。Project の PR アイテムが作業段階に合う Status になっているか確認し、利用可能な選択肢から設定する。実装中、レビュー待ち、マージ済みなどの実際の段階に合わせ、Project ごとの Status 名を使う。完全に合う選択肢がなければ最も近い既存の Status を使い、その制約を報告する。権限や設定上できない場合も内容と理由を報告する。
 
 git や gh の操作が失敗した場合は、API で迂回せず原因を切り分けて報告する。Project 操作の権限が不足する場合は、`gh auth refresh -s read:project -s project` が必要であることを伝える。
